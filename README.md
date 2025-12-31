@@ -1,0 +1,2 @@
+﻿# fast-api + PSQL
+
