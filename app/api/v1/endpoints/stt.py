@@ -4,7 +4,10 @@ import imageio_ffmpeg
 
 from app.utils.crypto import decrypt_aes
 from faster_whisper import WhisperModel
-from app.utils.llm import postprocess_stt 
+from app.utils.llm import postprocess_stt
+
+# mfcc store import (같은 인스턴스를 써야 함)
+from app.api.v1.endpoints.mfcc import vp_store
 
 router = APIRouter()
 
@@ -23,7 +26,7 @@ def convert_m4a_to_wav(m4a_path: str, wav_path: str) -> None:
 async def stt_endpoint(
     iv: str = Form(...),
     audio: UploadFile = File(...),
-    llm: bool = Form(True),  # 옵션: LLM 후처리 on/off
+    llm: bool = Form(True),
 ):
     m4a_path = None
     wav_path = None
@@ -47,33 +50,37 @@ async def stt_endpoint(
 
         convert_m4a_to_wav(m4a_path, wav_path)
 
-        segments, info = stt_model.transcribe(
-            wav_path,
-            language="ko",
-            task="transcribe"
-        )
-
+        segments, info = stt_model.transcribe(wav_path, language="ko", task="transcribe")
         text = "".join(seg.text for seg in segments).strip()
 
-        # STT가 빈 문자열이면 LLM 돌릴 필요 없음
         if not text:
             return {"text": "", "llm": None}
 
-        # LLM 후처리 옵션
+        # 통화 종료 시점: mfcc 점수들 최종 집계
+        call_id = vp_store._last_call_id
+        voicephishing_flag, voicephishing_score, vp_debug = await vp_store.finalize(call_id)
+
         llm_result = None
-        # 보이스피싱 판별 여부 (딥보이스 + mel spectrogram 분석 결과 활용 예정)
-        voicephishing_flag = True
-        voicephishing_score = 0.95 # 점수도 주셈~
         if llm:
-            # OpenAI 호출은 동기 함수라서(현재 유틸) blocking 될 수 있음
-            # 간단하게는 그대로 써도 되지만, 트래픽 있으면 to_thread 권장(아래 참고)
             llm_result = postprocess_stt(
-                    text=text,
-                    is_voicephishing=voicephishing_flag,
-                    voicephishing_score=voicephishing_score,
-                )
+                text=text,
+                is_voicephishing=voicephishing_flag,
+                voicephishing_score=voicephishing_score if voicephishing_score is not None else 0.0,
+            )
+
+        # 디버그 확인용(원하면 제거)
+        print("VP_DEBUG:", vp_debug)
         print("결과확인", llm_result)
-        return {"text": text, "llm": llm_result}
+
+        return {
+            "text": text,
+            "llm": llm_result,
+            "voicephishing": {
+                "flag": voicephishing_flag,
+                "score": voicephishing_score,
+                "debug": vp_debug,
+            }
+        }
 
     except HTTPException:
         raise

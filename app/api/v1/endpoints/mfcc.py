@@ -1,68 +1,46 @@
-# 오디오 음성을 mfcc 모델 돌리기 위함
-# mfcc로 변환해야함 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import numpy as np
-import tempfile
-import soundfile as sf
-
 from app.utils.crypto import decrypt_aes
-
-# faster-whisper
-from faster_whisper import WhisperModel  # :contentReference[oaicite:2]{index=2}
+from app.services.mfcc_infer import MFCCInfer, MFCCInferConfig
+from app.services.vp_store import VoicePhishingStore
 
 router = APIRouter()
+mfcc_infer: MFCCInfer | None = None
 
-# 서버 시작 시 1회 로딩 (매 요청마다 로딩하면 너무 느림)
-# model_size: "tiny", "base", "small", "medium", "large-v3" 등
-# CPU면 tiny/base/small 추천
-MODEL_SIZE = "small"
-stt_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")  # :contentReference[oaicite:3]{index=3}
+# 전역 store (로컬 single-process에서 OK)
+vp_store = VoicePhishingStore(ttl_sec=60 * 60)
 
+@router.on_event("startup")
+def startup_load_model():
+    global mfcc_infer
+    mfcc_infer = MFCCInfer(
+        model_path="assets/models/mfcc_best_model.pt",
+        cfg=MFCCInferConfig(device="cpu", target_len=501),
+    )
 
-@router.post("/mfcc")
+@router.post("") 
 async def mfcc_endpoint(
+    call_id: str = Form(...),      # ✅ 통화 식별자 (CallLog id 등)
     iv: str = Form(...),
     audio: UploadFile = File(...)
 ):
-    try:
-        # 1) 암호화된 오디오 읽기
-        encrypted_bytes = await audio.read()
-        if not encrypted_bytes:
-            raise HTTPException(status_code=400, detail="Empty audio file")
+    if mfcc_infer is None:
+        raise HTTPException(status_code=503, detail="MFCC model not loaded")
 
-        # 2) AES 복호화 -> PCM bytes
-        pcm_bytes = decrypt_aes(iv, encrypted_bytes)
+    encrypted_bytes = await audio.read()
+    if not encrypted_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio")
 
-        # 3) PCM bytes -> np.int16
-        audio_i16 = np.frombuffer(pcm_bytes, dtype=np.int16)
-        if audio_i16.size == 0:
-            raise HTTPException(status_code=400, detail="Decoded PCM is empty")
+    pcm_bytes = decrypt_aes(iv, encrypted_bytes)
+    audio_i16 = np.frombuffer(pcm_bytes, dtype=np.int16)
+    if audio_i16.size == 0:
+        raise HTTPException(status_code=400, detail="Decoded PCM is empty")
 
-        # 4) wav 파일로 임시 저장 (가장 쉬운 방식)
-        #    (soundfile은 float/short 모두 저장 가능)
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            sf.write(f.name, audio_i16, samplerate=16000)
-            wav_path = f.name
+    result = mfcc_infer.predict_from_pcm_i16(audio_i16)
+    score = float(result["phishing_score"])
 
-        # 5) STT 실행 (한국어 고정)
-        # segments는 generator 비슷하게 나오므로 text를 이어붙임
-        segments, info = stt_model.transcribe(
-            wav_path,
-            language="ko",
-            task="transcribe"
-        )  # :contentReference[oaicite:4]{index=4}
+    # 5초 점수 저장
+    await vp_store.add_score(call_id, score)
 
-        text_parts = []
-        for seg in segments:
-            # seg.text 안에 각 구간 텍스트
-            text_parts.append(seg.text)
-
-        text = "".join(text_parts).strip()
-        # mfcc_best_model 로 5초 분량의 음성데이터를 넣고 돌림
-        return {"text": text, "language": getattr(info, "language", "ko")}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        # 디버깅용 에러 메시지(운영에서는 숨기는 게 좋음)
-        raise HTTPException(status_code=500, detail=f"STT failed: {e}")
+    # 원하면 debug로 통계도 같이 반환 가능
+    return result
