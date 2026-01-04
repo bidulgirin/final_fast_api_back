@@ -4,7 +4,7 @@ import imageio_ffmpeg
 
 from app.utils.crypto import decrypt_aes
 from faster_whisper import WhisperModel
-from app.utils.llm import postprocess_stt  # ✅ 추가
+from app.utils.llm import postprocess_stt 
 
 router = APIRouter()
 
@@ -23,7 +23,7 @@ def convert_m4a_to_wav(m4a_path: str, wav_path: str) -> None:
 async def stt_endpoint(
     iv: str = Form(...),
     audio: UploadFile = File(...),
-    llm: bool = Form(False),  # ✅ 옵션: LLM 후처리 on/off
+    llm: bool = Form(True),  # 옵션: LLM 후처리 on/off
 ):
     m4a_path = None
     wav_path = None
@@ -55,22 +55,25 @@ async def stt_endpoint(
 
         text = "".join(seg.text for seg in segments).strip()
 
-        # ✅ STT가 빈 문자열이면 LLM 돌릴 필요 없음
+        # STT가 빈 문자열이면 LLM 돌릴 필요 없음
         if not text:
-            return {"text": "", "language": getattr(info, "language", "ko"), "llm": None}
+            return {"text": "", "llm": None}
 
-        # ✅ LLM 후처리 옵션
+        # LLM 후처리 옵션
         llm_result = None
+        # 보이스피싱 판별 여부 (딥보이스 + mel spectrogram 분석 결과 활용 예정)
+        voicephishing_flag = True
+        voicephishing_score = 0.95 # 점수도 주셈~
         if llm:
             # OpenAI 호출은 동기 함수라서(현재 유틸) blocking 될 수 있음
             # 간단하게는 그대로 써도 되지만, 트래픽 있으면 to_thread 권장(아래 참고)
-            llm_result = postprocess_stt(text)
-
-        return {
-            "text": text,
-            "language": getattr(info, "language", "ko"),
-            "llm": llm_result
-        }
+            llm_result = postprocess_stt(
+                    text=text,
+                    is_voicephishing=voicephishing_flag,
+                    voicephishing_score=voicephishing_score,
+                )
+        print("결과확인", llm_result)
+        return {"text": text, "llm": llm_result}
 
     except HTTPException:
         raise
