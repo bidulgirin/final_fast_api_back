@@ -20,7 +20,7 @@ def startup_load_model():
 
 @router.post("") 
 async def mfcc_endpoint(
-    call_id: str = Form(...),      # ✅ 통화 식별자 (CallLog id 등)
+    call_id: str = Form(...),      # 통화 식별자 (CallLog id 등) 1로 고정 시킴
     iv: str = Form(...),
     audio: UploadFile = File(...)
 ):
