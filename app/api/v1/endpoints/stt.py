@@ -10,7 +10,7 @@ from app.utils.llm import postprocess_stt
 from app.api.v1.endpoints.mfcc import vp_store
 
 router = APIRouter()
-
+# large v3 + gpu + int 16 으로 변환해야함 (그래야 정확도 올라감)
 MODEL_SIZE = "small"
 stt_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
 FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
@@ -21,8 +21,8 @@ def convert_m4a_to_wav(m4a_path: str, wav_path: str) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg convert failed: {result.stderr}")
-
-@router.post("/stt")
+# 들어온 데이터를 stt 로 변환한거 + 감성분류
+@router.post("/stt")  
 async def stt_endpoint(
     iv: str = Form(...),
     audio: UploadFile = File(...),
