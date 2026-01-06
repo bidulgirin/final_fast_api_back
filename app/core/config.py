@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str  # 예: postgresql+psycopg2://user:pass@localhost:5432/mydb
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-5.2"   # 필요 시 프로젝트에 맞게 변경
+    OPENAI_MODEL: str = "gpt-3.5-turbo"   # 예: gpt-4, gpt-3.5-turbo
     OPENAI_MAX_OUTPUT_TOKENS: int = 700
     
 
