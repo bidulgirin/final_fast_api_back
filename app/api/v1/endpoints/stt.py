@@ -5,6 +5,7 @@ import imageio_ffmpeg
 from app.utils.crypto import decrypt_aes
 from faster_whisper import WhisperModel
 from app.utils.llm import postprocess_stt
+from app.api.v1.endpoints.emotion import load_emotion_model, infer_emotion_probs
 
 # mfcc store import (같은 인스턴스를 써야 함)
 from app.api.v1.endpoints.mfcc import vp_store
@@ -12,7 +13,11 @@ from app.api.v1.endpoints.mfcc import vp_store
 router = APIRouter()
 # large v3 + gpu + int 16 으로 변환해야함 (그래야 정확도 올라감)
 MODEL_SIZE = "small"
+# MODEL_SIZE = "large-v3"
 stt_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+emotion_model = load_emotion_model("assets/models/emotion_model_android.pt")
+
+
 FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
 def convert_m4a_to_wav(m4a_path: str, wav_path: str) -> None:
@@ -50,7 +55,19 @@ async def stt_endpoint(
 
         convert_m4a_to_wav(m4a_path, wav_path)
 
-        segments, info = stt_model.transcribe(wav_path, language="ko", task="transcribe")
+        segments, info = stt_model.transcribe(
+            wav_path, 
+            language="ko", 
+            task="transcribe",
+            beam_size=5,        # 기본이 5인 경우가 많지만 명시해도 좋음(필수)
+            vad_filter=True,    # 무음 구간 제거로 품질/안정성에 도움될 때 많음
+            )
+        
+
+        
+
+
+
         text = "".join(seg.text for seg in segments).strip()
 
         if not text:
@@ -67,8 +84,11 @@ async def stt_endpoint(
                 is_voicephishing=voicephishing_flag,
                 voicephishing_score=voicephishing_score if voicephishing_score is not None else 0.0,
             )
+            print("wav_path", wav_path)
+            result = infer_emotion_probs(emotion_model, wav_path)
+            print("감성감성~~~", result)
 
-        # 디버그 확인용(원하면 제거)
+        # 디버그 확인용
         print("VP_DEBUG:", vp_debug)
         print("결과확인", llm_result)
 
