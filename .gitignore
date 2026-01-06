@@ -1,3 +1,5 @@
 back_end/
 .env
 __pycache__/
+
+*.pt
