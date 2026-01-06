@@ -1,4 +1,4 @@
-from app.db.models.voice_phising_number_list import VoicePhising
+from app.db.models.voice_phising_number_list import VoicePhisingNumberList
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -28,7 +28,7 @@ class VoicePhisingOut(BaseModel):
 
 @router.post("", response_model=VoicePhisingOut, status_code=201)
 def insert_number(payload: VoicePhisingCreate, db: Session = Depends(get_db)):
-    row = VoicePhising(number=payload.number, description=payload.description)
+    row = VoicePhisingNumberList(number=payload.number, description=payload.description)
     db.add(row)
     try:
         db.commit()

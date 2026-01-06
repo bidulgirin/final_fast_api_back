@@ -27,7 +27,7 @@ def convert_m4a_to_wav(m4a_path: str, wav_path: str) -> None:
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg convert failed: {result.stderr}")
 # 들어온 데이터를 stt 로 변환한거 + 감성분류
-@router.post("/stt")  
+@router.post("")  
 async def stt_endpoint(
     iv: str = Form(...),
     audio: UploadFile = File(...),
@@ -85,8 +85,8 @@ async def stt_endpoint(
                 voicephishing_score=voicephishing_score if voicephishing_score is not None else 0.0,
             )
             print("wav_path", wav_path)
-            result = infer_emotion_probs(emotion_model, wav_path)
-            print("감성감성~~~", result)
+            # result = infer_emotion_probs(emotion_model, wav_path)
+            # print("감성감성~~~", result)
 
         # 디버그 확인용
         print("VP_DEBUG:", vp_debug)

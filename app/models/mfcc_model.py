@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class MFCCBestModel(nn.Module):
     """
-    ✅ state_dict 키가 cnn.*, lstm.*, fc.* 인 모델을 로딩하기 위한 구조.
+    state_dict 키가 cnn.*, lstm.*, fc.* 인 모델을 로딩하기 위한 구조.
 
     - CNN: Conv2d + BN (+ ReLU/Pool은 파라미터 없어서 state_dict에 안 보임)
     - LSTM: input_size=832, hidden_size=128, num_layers=1, bidirectional=False (체크포인트 기준)

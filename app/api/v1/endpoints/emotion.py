@@ -1,13 +1,26 @@
 import torch
 import torchaudio
+import os, zipfile
+
 
 LABELS = ["기쁨", "당황", "분노", "불안", "슬픔"]  # config.json id2label 순서 :contentReference[oaicite:1]{index=1}
 
 def load_emotion_model(torchscript_path: str) -> torch.jit.ScriptModule:
     # 동적 양자화(trace) 모델이면 보통 CPU에서 돌리는 걸 권장
-    model = torch.jit.load(torchscript_path, map_location="cpu")
-    model.eval()
-    return model
+    # state = torch.load("emotion.pth", map_location="cpu")
+    # model = MyModel(...)
+    # model.load_state_dict(state)
+    # model.eval()
+    
+    path = torchscript_path
+    print("exists:", os.path.exists(path))
+    print("size:", os.path.getsize(path), "bytes")
+    print("is_zipfile:", zipfile.is_zipfile(path))
+
+    with open(path, "rb") as f:
+        print("head:", f.read(16))
+    
+
 
 def preprocess_audio(
     file_path: str,

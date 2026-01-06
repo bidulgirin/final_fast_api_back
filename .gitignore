@@ -1,5 +1,9 @@
 back_end/
 .env
 __pycache__/
-
-*.pt
+.env
+dist/
+*.log
+versions/
+./assets/
+node_modules/
