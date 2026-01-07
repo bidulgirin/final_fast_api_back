@@ -2,10 +2,10 @@ back_end/
 .env
 __pycache__/
 *.pt
-
 .env
 dist/
 *.log
+*.pth
 versions/
 ./assets/
 node_modules/

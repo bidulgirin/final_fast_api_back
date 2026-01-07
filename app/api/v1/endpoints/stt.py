@@ -2,7 +2,8 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import tempfile, os, subprocess
 import imageio_ffmpeg
 
-from starlette.concurrency import run_in_threadpool  # 추가
+from starlette.concurrency import run_in_threadpool  
+from app.db.models.phising_sign import ae_detector
 
 from app.utils.crypto import decrypt_aes
 from faster_whisper import WhisperModel
@@ -24,6 +25,16 @@ def convert_m4a_to_wav(m4a_path: str, wav_path: str) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg convert failed: {result.stderr}")
+    
+
+def get_keywords_from_faiss(sentence: str) -> list[str]:
+    """
+    TODO:
+    - 여기에 Faiss 검색/추출 로직을 연결하세요.
+    - 요구사항: 보이스피싱 의심~주의일 경우 키워드 뽑아서 적재/반영
+    """
+    return []
+
 
 @router.post("")
 async def stt_endpoint(
@@ -94,6 +105,29 @@ async def stt_endpoint(
                 voicephishing_score=voicephishing_score if voicephishing_score is not None else 0.0,
             )
 
+
+
+        # =========================
+        # (추가) AE 보이스피싱 문장모델 추론
+        # - llm_result가 있으면 우선 사용, 없으면 stt text 사용
+        # - keywords는 faiss에서 뽑아 주입 (stub 자리)
+        # =========================
+        ae_input = llm_result if (llm_result and isinstance(llm_result, str)) else text
+
+        ae_keywords = []
+        try:
+            # "보이스피싱 의심~주의일경우 키워드 뽑아서 적재" 요구사항 반영 지점
+            # 아래 조건은 예시입니다. 프로젝트 기준으로 조건/임계값을 조정하세요.
+            is_suspicious = bool(voicephishing_flag) or ((voicephishing_score or 0.0) >= 0.5)
+
+            if is_suspicious:
+                ae_keywords = await run_in_threadpool(get_keywords_from_faiss, ae_input)
+
+            ae_result = await run_in_threadpool(ae_detector.predict, ae_input, ae_keywords)
+        except Exception as e:
+            print("AE phishing_sign inference failed:", e)
+            ae_result = None
+
         return {
             "text": text,
             "llm": llm_result,
@@ -107,6 +141,8 @@ async def stt_endpoint(
                 "top": emotion_top,
                 "probs": emotion_probs,
             },
+            # 여기로 출력
+            "phising_sign": ae_result,
         }
 
     except HTTPException:

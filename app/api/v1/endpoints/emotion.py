@@ -10,21 +10,12 @@ def load_emotion_model(torchscript_path: str, device: str = "cpu") -> torch.jit.
     model.eval()
     return model
     
-    path = torchscript_path
-    print("exists:", os.path.exists(path))
-    print("size:", os.path.getsize(path), "bytes")
-    print("is_zipfile:", zipfile.is_zipfile(path))
-
-    with open(path, "rb") as f:
-        print("head:", f.read(16))
-    
-
 
 def preprocess_audio(file_path: str, target_sr: int = 16000, target_sec: float = 5.0) -> torch.Tensor:
     # soundfile: (T, C) 형태로 읽힘
     audio, sr = sf.read(file_path, dtype="float32", always_2d=True)
     waveform = torch.from_numpy(audio).T  # [C, T]
-
+    
     # mono
     if waveform.size(0) > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
