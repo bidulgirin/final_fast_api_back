@@ -3,14 +3,13 @@ import torchaudio
 import os, zipfile
 import soundfile as sf
 
-LABELS = ["기쁨", "당황", "분노", "불안", "슬픔"]  # config.json id2label 순서 :contentReference[oaicite:1]{index=1}
+LABELS = ["기쁨", "당황", "분노", "불안", "슬픔"]  # => 협박 + 불안등의 라벨링을 추가해야함 중요...
 
 def load_emotion_model(torchscript_path: str, device: str = "cpu") -> torch.jit.ScriptModule:
     model = torch.jit.load(torchscript_path, map_location=device)
     model.eval()
     return model
     
-
 def preprocess_audio(file_path: str, target_sr: int = 16000, target_sec: float = 5.0) -> torch.Tensor:
     # soundfile: (T, C) 형태로 읽힘
     audio, sr = sf.read(file_path, dtype="float32", always_2d=True)
