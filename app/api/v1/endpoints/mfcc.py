@@ -2,6 +2,8 @@
 # 5초단위의 mfcc + mel 모델을 "하나의 엔드포인트"에서 함께 추론하고
 # 최종 phishing_score(퓨전 점수)를 반환하는 예시
 
+# 5초 단위로 함 
+
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import numpy as np
 

@@ -51,6 +51,7 @@ def build_input_items(history: list[dict], req: SendChatRequest) -> list[dict]:
     items.append({"role": "user", "content": req.user_text})
     return items
 
+# openai 가 아니라 이제 llm 모델에 물어봐야함 
 def ask_openai(history: list[dict], req: SendChatRequest) -> str:
     response = client.responses.create(
         model=settings.OPENAI_MODEL,

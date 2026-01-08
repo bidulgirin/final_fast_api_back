@@ -123,7 +123,7 @@ async def stt_endpoint(
         except Exception as e:
             print("AE phishing_sign inference failed:", e)
             ae_result = None
-
+        
         return {
             "text": text,
             "llm": llm_result,
