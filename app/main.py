@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.api.v1.router import router as v1_router
-from app.routers.test_db import router as test_db
-
+from app.api.v1.endpoints.chat import chat_faiss
 
 # DB 관련 import (Base / engine)
 from app.db.base import Base
 from app.db.session import engine, get_db
+
 
 # 모델들을 등록하기 위해 import (Base.metadata에 모델이 올라가도록)
 import app.db.models  # noqa: F401
@@ -48,7 +48,8 @@ faiss_store = FaissStore(index_path=FAISS_INDEX_PATH, model_name=EMBED_MODEL_NAM
 app.include_router(v1_router, prefix="/api/v1")
 
 # 테스트 라우터는 루트에 붙임 (prefix는 굳이 "" 안 줘도 됨)
-app.include_router(test_db)
+# chat-faiss 라우터 
+app.include_router(chat_faiss.router)
 
 
 
@@ -202,27 +203,50 @@ async def upload_xlsx(file: UploadFile = File(...), db: Session = Depends(get_db
 
 @app.post("/search", response_model=SearchResp)
 def search(req: SearchReq, db: Session = Depends(get_db)):
+    # k 값 검증: 1~50 범위가 아니면 400 에러
     if req.k <= 0 or req.k > 50:
         raise HTTPException(status_code=400, detail="k는 1~50 범위로 설정하세요.")
 
+    # FAISS 벡터 검색 수행
+    # D: 거리/유사도 스코어(보통 distance거나 -cosine 같은 형태)
+    # I: 매칭된 문서(벡터) ID 인덱스 (-1은 빈자리/미매칭 의미)
     D, I = faiss_store.search(req.query, req.k)
 
     hits: list[SearchHit] = []
+
+    # FAISS 결과에서 -1이 아닌 ID만 뽑아 DB 조회용 리스트로 준비
     ids = [int(x) for x in I[0].tolist() if int(x) != -1]
+
+    # 스코어 리스트 (I[0]과 같은 길이; -1 자리에도 스코어 값은 있을 수 있음)
     scores = D[0].tolist()
 
+    # 유효한 ID가 하나도 없으면 빈 결과 반환
     if not ids:
         return SearchResp(results=[])
 
-    doc_map = {d.id: d for d in db.execute(select(PhisingCaseDocs).where(PhisingCaseDocs.id.in_(ids))).scalars().all()}
+    # DB에서 ids에 해당하는 문서들을 한 번에 조회한 뒤,
+    # {doc_id: doc} 형태로 맵을 만들어 O(1)로 꺼낼 수 있게 함 (N+1 방지)
+    doc_map = {
+        d.id: d
+        for d in db.execute(
+            select(PhisingCaseDocs).where(PhisingCaseDocs.id.in_(ids))
+        ).scalars().all()
+    }
 
+    # FAISS 결과 순서를 유지하기 위해 스코어와 doc_id를 zip으로 같이 순회
     for score, doc_id in zip(scores, I[0].tolist()):
         doc_id = int(doc_id)
+
+        # -1은 FAISS에서 결과가 없음을 의미하므로 스킵
         if doc_id == -1:
             continue
+
+        # DB에서 가져온 문서가 있으면 사용, 없으면 스킵 (동기화 문제 대비)
         doc = doc_map.get(doc_id)
         if not doc:
             continue
+
+        # 응답 모델(SearchHit)로 변환해서 결과에 추가
         hits.append(
             SearchHit(
                 id=doc.id,
@@ -234,7 +258,9 @@ def search(req: SearchReq, db: Session = Depends(get_db)):
             )
         )
 
+    # 최종 결과 반환
     return SearchResp(results=hits)
+
 
 @app.post("/admin/rebuild-faiss")
 def admin_rebuild_faiss(db: Session = Depends(get_db)):
