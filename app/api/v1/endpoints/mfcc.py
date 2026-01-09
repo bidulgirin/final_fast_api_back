@@ -85,7 +85,7 @@ def startup_load_models():
     # 서버 STT(Whisper) 로드
     stt_infer = STTInfer(
         STTInferConfig(
-            model_size="tiny",
+            model_size="small",
             device="cpu",
             compute_type="int8",
             language="ko",

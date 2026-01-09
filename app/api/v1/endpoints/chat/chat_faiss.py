@@ -83,11 +83,19 @@ def get_openai_client() -> OpenAI:
 class ChatReq(BaseModel):
     session_id: Optional[str] = None
     message: str = Field(min_length=1)
+
     k: int = Field(default=5, ge=1, le=20)
-    min_score: float = Field(default=0.0, ge=-1.0, le=1.0)
+    min_score: float = Field(default=0.4, ge=-1.0, le=1.0)  # cosine 기준이면 0~1 사이를 주로 씀
+    # category는 당분간 안 쓴다 했지만, 서버는 선택적으로 받을 수 있게 둠(클라는 빼면 됨)
     category: Optional[str] = None
-    model: Optional[str] = None
+
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    model: Optional[str] = None
+
+    # 통화 컨텍스트(클라에서 보내면 LLM 입력에 포함)
+    call_id: Optional[int] = None
+    summary_text: Optional[str] = None
+    call_text: Optional[str] = None
 
 class ChatCaseCard(BaseModel):
     id: int
@@ -104,6 +112,16 @@ class ChatResp(BaseModel):
     matched_cases: List[ChatCaseCard]
     follow_up_questions: List[str]
     disclaimer: str
+
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+    created_at: str
+
+
+class HistoryResp(BaseModel):
+    session_id: str
+    messages: List[HistoryMessage]
 
 def risk_level_from(top_score: float) -> str:
     if top_score >= 0.78:
@@ -143,6 +161,16 @@ def build_context(cases: List[ChatCaseCard]) -> str:
         })
     return json.dumps(payload, ensure_ascii=False)
 
+def ensure_session(db: Session, session_id: Optional[str]) -> ChatSession:
+    if session_id:
+        s = db.get(ChatSession, session_id)
+        if s:
+            return s
+    s = ChatSession()
+    db.add(s)
+    db.commit()
+    return s
+
 def save_message(
     db: Session,
     session: ChatSession,
@@ -151,6 +179,7 @@ def save_message(
     retrieval: Optional[Dict[str, Any]] = None,
     risk_level: Optional[str] = None,
     model: Optional[str] = None,
+    call_context: Optional[Dict[str, Any]] = None,
 ):
     msg = ChatMessage(
         session_id=session.id,
@@ -159,6 +188,7 @@ def save_message(
         retrieval=retrieval,
         risk_level=risk_level,
         model=model,
+        call_context=call_context,
     )
     db.add(msg)
     session.updated_at = datetime.now(timezone.utc)
@@ -174,6 +204,39 @@ def ensure_session(db: Session, session_id: Optional[str]) -> ChatSession:
     db.commit()
     return s
 
+def call_llm_strict_json(
+    client: OpenAI,
+    model: str,
+    instructions: str,
+    user_input: str,
+    temperature: float,
+) -> Dict[str, Any]:
+    """
+    1) json_schema 시도
+    2) 실패 시 json_object로 폴백(유효 JSON만 보장)
+    """
+    try:
+        resp = client.responses.create(
+            model=model,
+            instructions=instructions,
+            input=user_input,
+            temperature=temperature,
+            store=False,
+            text={"format": CHAT_JSON_SCHEMA},
+        )
+        return json.loads(resp.output_text)
+    except Exception:
+        resp = client.responses.create(
+            model=model,
+            instructions=instructions + "\n반드시 JSON object 1개만 출력해라.",
+            input=user_input,
+            temperature=temperature,
+            store=False,
+            text={"format": {"type": "json_object"}},
+        )
+        return json.loads(resp.output_text)
+
+
 @router.post("/chat", response_model=ChatResp)
 def chat(req: ChatReq, db: Session = Depends(get_db)):
     # 0) 세션 확보
@@ -184,7 +247,7 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         db=db,
         query=req.message,
         k=req.k,
-        category=req.category,
+        category=req.category, # 클라이언트는 이값 안보내도됨 근데 보내면 더 정확하게 검색함...
         min_score=req.min_score,
     )
     matched_cases = [
@@ -206,6 +269,16 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         "top": [{"doc_id": c.id, "score": c.score, "category": c.category} for c in matched_cases[:5]],
     }
 
+    call_ctx = {
+        "call_id": req.call_id,
+        "summary_text": mask_pii(req.summary_text) if req.summary_text else None,
+        "call_text": mask_pii(req.call_text) if req.call_text else None,
+    }
+    # 값이 전부 None이면 저장 의미가 없으니 None 처리
+    if all(v is None for v in call_ctx.values()):
+        call_ctx = None
+
+
     # 2) 유저 메시지 저장(마스킹)
     save_message(
         db=db,
@@ -215,6 +288,7 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         retrieval=retrieval_log,
         risk_level=None,
         model=req.model,
+        call_context=call_ctx,
     )
 
     # 3) 사례가 없으면: "없다" + 단정 금지 + 안전 안내 (LLM 호출 X)
@@ -236,6 +310,7 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
             retrieval=retrieval_log,
             risk_level="LOW",
             model=None,
+            call_context=None,
         )
 
         return ChatResp(
@@ -258,19 +333,24 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
     # “근거 밖 단정 금지”를 아주 강하게
     system_instructions = (
         "너는 보이스피싱/스미싱 안전 안내 챗봇이다.\n"
-        "반드시 [유사사례 컨텍스트(JSON)]에 포함된 내용만 근거로 사용해라.\n"
-        "컨텍스트에 없는 사실은 절대 단정하지 말고, 필요한 경우 follow_up_questions로 물어봐라.\n"
-        "유사사례가 없는 경우에는 '없다'고 말해야 하지만, 지금은 사례가 주어졌다.\n"
-        "항상 사용자가 즉시 할 수 있는 안전 행동(통화 종료/정보 제공 금지/공식번호 재확인)을 포함해라.\n"
-        "출력은 반드시 JSON 하나만 출력하고, 스키마를 엄격히 준수해라."
+        "사용자가 방금 보낸 [사용자 입력]이 '질문'이며, 반드시 그 질문에 직접 답해야 한다.\n"
+        "[통화 요약/전사]는 참고 정보일 뿐이며 질문과 무관하면 무시한다.\n"
+        "반드시 [유사사례 컨텍스트(JSON)]에 포함된 내용만 근거로 사용한다.\n"
+        "컨텍스트에 없는 사실은 단정하지 말고 follow_up_questions로 확인 질문을 한다.\n"
+        "출력은 JSON 하나만 출력하고 스키마를 엄격히 준수한다."
     )
 
+    extra_ctx = ""
+    if req.summary_text:
+        extra_ctx += f"\n[통화 요약]\n{req.summary_text}\n"
+    if req.call_text:
+        extra_ctx += f"\n[통화 전사/내용]\n{req.call_text}\n"
+
     user_input = (
-        f"[사용자 입력]\n{req.message}\n\n"
+        f"[사용자 입력]\n{req.message}\n"
+        f"{extra_ctx}\n"
         f"[유사사례 컨텍스트(JSON)]\n{build_context(matched_cases)}\n\n"
-        f"[참고]\n"
-        f"- 내부 위험도 힌트(모델이 따라야 하는 것은 아님): {risk_level}\n"
-        f"- top_score: {top_score:.4f}\n"
+        f"[참고]\n- top_score: {top_score:.4f}\n- internal_risk_hint: {risk_level}\n"
     )
 
     client = get_openai_client()
@@ -310,18 +390,52 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         retrieval=retrieval_log,
         risk_level=out.get("risk_level", risk_level),
         model=model,
+        call_context=None,
     )
 
     return ChatResp(
         session_id=session.id,
         risk_level=out.get("risk_level", risk_level),
-        final_answer=out["final_answer"],
+        # final_answer=out["final_answer"],
+        final_answer=out.get("final_answer", ""),
         matched_cases=matched_cases[:req.k],
         follow_up_questions=out.get("follow_up_questions", []),
         disclaimer=out.get("disclaimer", "본 안내는 내부 사례 기반 참고용이며 확정 판단이 아닙니다."),
     )
 
+# =========================================================
+# 0) 세션/메시지 저장용 DB 모델
+# =========================================================
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
 
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(36), ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True, nullable=False)
+
+    role = Column(String(16), nullable=False)  # "user" | "assistant"
+    content_masked = Column(Text, nullable=False)
+
+    # 어떤 검색 근거로 답했는지(운영/디버깅)
+    retrieval = Column(JSONB, nullable=True)   # {"k":..,"min_score":..,"top":[...]}
+    risk_level = Column(String(16), nullable=True)  # LOW|MEDIUM|HIGH
+    model = Column(String(64), nullable=True)
+
+    # (선택) 통화 컨텍스트도 저장하고 싶으면 여기에 넣어도 됨(마스킹 후)
+    call_context = Column(JSONB, nullable=True)  # {"call_id":..,"summary_text":..,"call_text":..}
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    session = relationship("ChatSession", back_populates="messages")
 
 # =========================================================
 # 1) DB Model (문서 저장: id/category/user_query/answer/metadata)
@@ -744,33 +858,34 @@ def list_categories(
     uniq = sorted(list({r for r in rows}))[:limit]
     return {"categories": uniq}
 
+# =========================================================
+# 7) 히스토리 조회 API (마스킹된 내용만 반환)
+# GET /chat-faiss/sessions/{session_id}/messages?limit=200
+# =========================================================
+@router.get("/sessions/{session_id}/messages", response_model=HistoryResp)
+def get_session_messages(
+    session_id: str,
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    s = db.get(ChatSession, session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
+    rows = db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc())
+        .limit(limit)
+    ).scalars().all()
 
-# 메세지 히스토리 저장 ==============================================================
-class ChatSession(Base):
-    __tablename__ = "chat_sessions"
+    msgs = [
+        HistoryMessage(
+            role=r.role,
+            content=r.content_masked,
+            created_at=r.created_at.astimezone().isoformat() if r.created_at else "",
+        )
+        for r in rows
+    ]
+    return HistoryResp(session_id=session_id, messages=msgs)
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-
-    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
-
-
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(36), ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True, nullable=False)
-
-    role = Column(String(16), nullable=False)  # "user" | "assistant"
-    content_masked = Column(Text, nullable=False)
-
-    # 운영/디버깅용: 어떤 근거로 답했는지
-    retrieval = Column(JSONB, nullable=True)  # {"top": [{"doc_id":..,"score":..,"category":..}], "k":.., "min_score":..}
-    risk_level = Column(String(16), nullable=True)  # "LOW"|"MEDIUM"|"HIGH"
-    model = Column(String(64), nullable=True)
-
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-
-    session = relationship("ChatSession", back_populates="messages")
