@@ -1,12 +1,174 @@
 {
-    "1": {"key": "피해신고", "title": "🚨 즉시 피해 신고", "content": "경찰청(112) 또는 금융감독원(1332)에 즉시 신고하시기 바랍니다."},
-    "2": {"key": "지급정지", "title": "💰 계좌 지급정지", "content": "송금하거나 입금받은 계좌가 있는 금융회사 콜센터에 전화하여 즉시 지급정지를 신청하세요."},
-    "3": {"key": "개인정보노출등록", "title": "🔐 개인정보 노출 등록", "content": "개인정보노출자 사고예방시스템(https://pd.fss.or.kr/)에 접속하여 등록하여 추가 피해를 막으세요."},
-    "4": {"key": "계좌일괄정지", "title": "🛑 전 계좌 일괄 정지", "content": "계좌정보통합관리서비스(www.payinfo.or.kr)에서 본인의 모든 계좌 지급 정지를 신청하세요."},
-    "5": {"key": "명의도용조회", "title": "📱 명의도용 확인 (M-Safer)", "content": "명의도용방지서비스(https://www.msafer.or.kr/)에서 본인 몰래 개설된 휴대전화가 있는지 확인하세요."},
-    "6": {"key": "악성앱삭제", "title": "🛡️ 악성 앱 검사 및 삭제", "content": "시티즈코난 앱으로 검사하시고, 즉시 비행기모드 전환 후 중요 자료 백업 및 공장초기화를 진행하세요."},
-    "7": {"key": "피해사례공유", "title": "📢 피해 사례 공유", "content": "금융감독원 보이스피싱지킴이 페이지에서 피해 사례를 공유하여 추가 피해자를 막아주세요."},
-    "8": {"key": "피싱사이트신고", "title": "🖥️ 피싱 사이트 신고", "content": "한국인터넷진흥원(KISA) 118 센터를 통해 사기 사이트 및 피싱 사이트를 신고하세요."},
-    "9": {"key": "피해지원상담", "title": "👨‍🏫 전문 상담 신청", "content": "금융감독원 포털 파인(Fine)에서 보이스피싱 관련 전문 상담을 신청할 수 있습니다."},
-    "10": {"key": "전화번호차단", "title": "📞 사기 전화번호 차단", "content": "경찰청 통합대응단(counterscam112.go.kr)에서 피싱 번호 차단을 요청하세요."}
+  "1": {
+    "key": "피해신고",
+    "title": "🚨 즉시 피해 신고",
+    "content": "경찰청(112) 또는 금융감독원(1332)에 즉시 신고하시기 바랍니다.",
+    "metadata": {
+      "tags": ["신고", "긴급"],
+      "stage": ["any"],
+      "risk_level": "high",
+      "priority": 1,
+      "contacts": [
+        {"name": "경찰청", "phone": "112"},
+        {"name": "금융감독원", "phone": "1332"}
+      ],
+      "actions": [
+        {"type": "CALL", "label": "112 전화", "value": "112"},
+        {"type": "CALL", "label": "1332 전화", "value": "1332"}
+      ],
+      "trigger_keywords": ["보이스피싱", "사기", "신고", "협박", "검찰", "경찰", "금감원"],
+      "safe_note": "확정 판단이 어려우면 통화 종료 후 공식번호로 재확인하세요."
+    }
+  },
+  "2": {
+    "key": "지급정지",
+    "title": "💰 계좌 지급정지",
+    "content": "송금하거나 입금받은 계좌가 있는 금융회사 콜센터에 전화하여 즉시 지급정지를 신청하세요.",
+    "metadata": {
+      "tags": ["지급정지", "송금", "긴급"],
+      "stage": ["post_transfer"],
+      "risk_level": "critical",
+      "priority": 1,
+      "contacts": [
+        {"name": "경찰청", "phone": "112"},
+        {"name": "금융감독원", "phone": "1332"}
+      ],
+      "actions": [
+        {"type": "CALL", "label": "112 전화", "value": "112"},
+        {"type": "CALL", "label": "1332 전화", "value": "1332"}
+      ],
+      "trigger_keywords": ["송금", "이체", "보냈", "입금", "계좌", "지급정지"],
+      "safe_note": "시간이 중요합니다. 즉시 콜센터/112로 연락하세요."
+    }
+  },
+  "3": {
+    "key": "개인정보노출등록",
+    "title": "🔐 개인정보 노출 등록",
+    "content": "개인정보노출자 사고예방시스템(https://pd.fss.or.kr/)에 접속하여 등록하여 추가 피해를 막으세요.",
+    "metadata": {
+      "tags": ["개인정보", "노출", "예방"],
+      "stage": ["any"],
+      "risk_level": "high",
+      "priority": 2,
+      "links": [
+        {"label": "개인정보노출자 사고예방시스템", "url": "https://pd.fss.or.kr/"}
+      ],
+      "actions": [
+        {"type": "OPEN_URL", "label": "등록 사이트 열기", "value": "https://pd.fss.or.kr/"}
+      ],
+      "trigger_keywords": ["주민등록번호", "신분증", "개인정보", "유출", "노출", "비밀번호"],
+      "safe_note": "추가 피해 예방을 위해 신속히 등록하세요."
+    }
+  },
+  "4": {
+    "key": "계좌일괄정지",
+    "title": "🛑 전 계좌 일괄 정지",
+    "content": "계좌정보통합관리서비스(www.payinfo.or.kr)에서 본인의 모든 계좌 지급 정지를 신청하세요.",
+    "metadata": {
+      "tags": ["계좌", "일괄정지", "긴급"],
+      "stage": ["post_exposure", "post_transfer"],
+      "risk_level": "critical",
+      "priority": 1,
+      "links": [
+        {"label": "계좌정보통합관리서비스", "url": "https://www.payinfo.or.kr/"}
+      ],
+      "actions": [
+        {"type": "OPEN_URL", "label": "payinfo 열기", "value": "https://www.payinfo.or.kr/"}
+      ],
+      "trigger_keywords": ["계좌", "비밀번호", "노출", "정지", "일괄", "어카운트인포"],
+      "safe_note": "노출/피해가 의심되면 계좌를 우선 보호하세요."
+    }
+  },
+  "5": {
+    "key": "명의도용조회",
+    "title": "📱 명의도용 확인 (M-Safer)",
+    "content": "명의도용방지서비스(https://www.msafer.or.kr/)에서 본인 몰래 개설된 휴대전화가 있는지 확인하세요.",
+    "metadata": {
+      "tags": ["명의도용", "휴대폰", "개통"],
+      "stage": ["post_exposure"],
+      "risk_level": "high",
+      "priority": 2,
+      "links": [
+        {"label": "M-Safer", "url": "https://www.msafer.or.kr/"}
+      ],
+      "actions": [
+        {"type": "OPEN_URL", "label": "M-Safer 열기", "value": "https://www.msafer.or.kr/"}
+      ],
+      "trigger_keywords": ["명의", "개통", "휴대폰", "유심", "본인인증", "도용"],
+      "safe_note": "모르는 개통이 있으면 즉시 통신사에도 문의하세요."
+    }
+  },
+  "6": {
+    "key": "악성앱삭제",
+    "title": "🛡️ 악성 앱 검사 및 삭제",
+    "content": "시티즈코난 앱으로 검사하시고, 즉시 비행기모드 전환 후 중요 자료 백업 및 공장초기화를 진행하세요.",
+    "metadata": {
+      "tags": ["악성앱", "원격제어", "긴급"],
+      "stage": ["after_install"],
+      "risk_level": "critical",
+      "priority": 1,
+      "actions": [
+        {"type": "TOGGLE_AIRPLANE_MODE", "label": "비행기모드 안내", "value": "airplane_mode"},
+        {"type": "CHECK_SECURITY_APP", "label": "보안 앱 검사", "value": "citizen_conan"}
+      ],
+      "trigger_keywords": ["악성앱", "원격", "팀뷰어", "설치", "링크 눌렀", "해킹"],
+      "safe_note": "금융앱/인증서가 위험할 수 있으니 통신 차단을 우선하세요."
+    }
+  },
+  "7": {
+    "key": "피해사례공유",
+    "title": "📢 피해 사례 공유",
+    "content": "금융감독원 보이스피싱지킴이 페이지에서 피해 사례를 공유하여 추가 피해자를 막아주세요.",
+    "metadata": {
+      "tags": ["공유", "예방"],
+      "stage": ["post_incident"],
+      "risk_level": "low",
+      "priority": 5,
+      "trigger_keywords": ["사례", "공유", "제보", "피해"],
+      "safe_note": "개인정보는 마스킹/익명화 후 공유하세요."
+    }
+  },
+  "8": {
+    "key": "피싱사이트신고",
+    "title": "🖥️ 피싱 사이트 신고",
+    "content": "한국인터넷진흥원(KISA) 118 센터를 통해 사기 사이트 및 피싱 사이트를 신고하세요.",
+    "metadata": {
+      "tags": ["피싱사이트", "신고", "KISA"],
+      "stage": ["any"],
+      "risk_level": "high",
+      "priority": 2,
+      "contacts": [{"name": "KISA", "phone": "118"}],
+      "actions": [{"type": "CALL", "label": "118 전화", "value": "118"}],
+      "trigger_keywords": ["사이트", "링크", "피싱", "파밍", "가짜", "접속"],
+      "safe_note": "의심 URL은 클릭하지 말고 신고/차단을 우선하세요."
+    }
+  },
+  "9": {
+    "key": "피해지원상담",
+    "title": "👨‍🏫 전문 상담 신청",
+    "content": "금융감독원 포털 파인(Fine)에서 보이스피싱 관련 전문 상담을 신청할 수 있습니다.",
+    "metadata": {
+      "tags": ["상담", "지원"],
+      "stage": ["post_incident"],
+      "risk_level": "medium",
+      "priority": 4,
+      "trigger_keywords": ["상담", "도움", "지원", "피해", "환급"],
+      "safe_note": "공식 채널을 통해 상담을 신청하세요."
+    }
+  },
+  "10": {
+    "key": "전화번호차단",
+    "title": "📞 사기 전화번호 차단",
+    "content": "경찰청 통합대응단(counterscam112.go.kr)에서 피싱 번호 차단을 요청하세요.",
+    "metadata": {
+      "tags": ["차단", "전화", "예방"],
+      "stage": ["any"],
+      "risk_level": "medium",
+      "priority": 4,
+      "links": [{"label": "통합대응단", "url": "https://counterscam112.go.kr/"}],
+      "actions": [{"type": "OPEN_URL", "label": "차단 요청 사이트", "value": "https://counterscam112.go.kr/"}],
+      "trigger_keywords": ["차단", "전화번호", "스팸", "계속", "연락"],
+      "safe_note": "차단 후에도 유사 번호로 재시도할 수 있어 주의하세요."
+    }
+  }
 }

@@ -50,6 +50,8 @@ from openai import OpenAI
 
 from sqlalchemy.orm import relationship
 
+from app.api.v1.endpoints.chat.chat_guide import chat_guide_store
+
 # --- (chat_faiss.py 상단 import들 근처에 추가) ---
 import os
 import json
@@ -105,6 +107,14 @@ class ChatCaseCard(BaseModel):
     answer: str
     metadata: Optional[Dict[str, Any]] = None
 
+class GuideCard(BaseModel):
+    id: int
+    score: float
+    key: str
+    title: str
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+
 class ChatResp(BaseModel):
     session_id: str
     risk_level: str
@@ -158,6 +168,20 @@ def build_context(cases: List[ChatCaseCard]) -> str:
             "user_query": c.user_query,
             "answer": c.answer,
             "metadata": c.metadata or {},
+        })
+    return json.dumps(payload, ensure_ascii=False)
+
+# 가이드 빌더임
+def build_guides_context(guides: List[GuideCard]) -> str:
+    payload = []
+    for g in guides[:5]:
+        payload.append({
+            "id": g.id,
+            "score": round(g.score, 4),
+            "key": g.key,
+            "title": g.title,
+            "content": g.content,
+            "metadata": g.metadata or {},
         })
     return json.dumps(payload, ensure_ascii=False)
 
@@ -236,6 +260,20 @@ def call_llm_strict_json(
         )
         return json.loads(resp.output_text)
 
+def clip(text: Optional[str], limit: int) -> str:
+    if not text:
+        return ""
+    t = text.strip()
+    return t[:limit] + ("…(생략)" if len(t) > limit else "")
+
+def normalize_model(m: Optional[str]) -> Optional[str]:
+    if not m:
+        return None
+    m = m.strip()
+    if not m or m.lower() in ("string", "null", "none"):
+        return None
+    return m
+
 
 @router.post("/chat", response_model=ChatResp)
 def chat(req: ChatReq, db: Session = Depends(get_db)):
@@ -262,11 +300,43 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         for h in hits
     ]
 
+     # 2) 가이드 검색(FAISS) - 통화요약/전사를 일부 섞어서 recall 강화
+    guide_query = req.message
+    if req.summary_text:
+        guide_query += "\n" + clip(req.summary_text, 500)
+    if req.call_text:
+        guide_query += "\n" + clip(req.call_text, 1000)
+
+    guide_hits = chat_guide_store.search(
+        db=db,
+        query=guide_query,
+        k=min(req.k, 10),
+        min_score=0.0,  # 필요하면 req.min_score랑 분리해도 됨
+    )
+    matched_guides = [
+        GuideCard(
+            id=g.id,
+            score=g.score,
+            key=g.key,
+            title=g.title,
+            content=g.content,
+            metadata=g.metadata,
+        )
+        for g in guide_hits
+    ]
+
     retrieval_log = {
-        "k": req.k,
-        "min_score": req.min_score,
-        "category": req.category,
-        "top": [{"doc_id": c.id, "score": c.score, "category": c.category} for c in matched_cases[:5]],
+        "cases": {
+            "k": req.k,
+            "min_score": req.min_score,
+            "category": req.category,
+            "top": [{"doc_id": c.id, "score": c.score, "category": c.category} for c in matched_cases[:5]],
+        },
+        "guides": {
+            "k": min(req.k, 10),
+            "min_score": 0.0,
+            "top": [{"guide_id": g.id, "score": g.score, "key": g.key} for g in matched_guides[:5]],
+        }
     }
 
     call_ctx = {
@@ -337,6 +407,7 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         "[통화 요약/전사]는 참고 정보일 뿐이며 질문과 무관하면 무시한다.\n"
         "반드시 [유사사례 컨텍스트(JSON)]에 포함된 내용만 근거로 사용한다.\n"
         "컨텍스트에 없는 사실은 단정하지 말고 follow_up_questions로 확인 질문을 한다.\n"
+        "사례가 없으면 '유사 사례를 찾지 못했다'고 명시하되, 가이드가 있으면 가이드를 근거로 안내할 수 있다.\n"
         "출력은 JSON 하나만 출력하고 스키마를 엄격히 준수한다."
     )
 
@@ -350,6 +421,7 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         f"[사용자 입력]\n{req.message}\n"
         f"{extra_ctx}\n"
         f"[유사사례 컨텍스트(JSON)]\n{build_context(matched_cases)}\n\n"
+        f"[가이드 컨텍스트(JSON)]\n{build_guides_context(matched_guides)}\n\n"
         f"[참고]\n- top_score: {top_score:.4f}\n- internal_risk_hint: {risk_level}\n"
     )
 
@@ -368,12 +440,20 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         out = json.loads(resp.output_text)
     except Exception as e:
         # LLM 실패 시에도 "근거 기반" 원칙 유지: 가장 유사 사례 answer를 그대로 사용(재작성 X)
-        fallback = (
-            f"유사 사례가 발견되어 참고 정보를 제공합니다(단정 아님).\n\n"
-            f"[가장 유사한 사례: {matched_cases[0].category}, score={matched_cases[0].score:.2f}]\n"
-            f"{matched_cases[0].answer}\n\n"
-            f"추가로, 비밀번호/인증번호/개인정보는 제공하지 말고 통화를 종료한 뒤 공식번호로 재확인하세요."
-        )
+        # fallback = (
+        #     f"유사 사례가 발견되어 참고 정보를 제공합니다(단정 아님).\n\n"
+        #     f"[가장 유사한 사례: {matched_cases[0].category}, score={matched_cases[0].score:.2f}]\n"
+        #     f"{matched_cases[0].answer}\n\n"
+        #     f"추가로, 비밀번호/인증번호/개인정보는 제공하지 말고 통화를 종료한 뒤 공식번호로 재확인하세요."
+        # )
+        parts = []
+        if matched_cases:
+            parts.append(f"[유사 사례: {matched_cases[0].category}, score={matched_cases[0].score:.2f}]\n{matched_cases[0].answer}")
+        if matched_guides:
+            g = matched_guides[0]
+            parts.append(f"[추천 가이드: {g.title}]\n{g.content}")
+        fallback = "유사 근거 기반으로 참고 안내를 제공합니다(단정 아님).\n\n" + "\n\n".join(parts)
+        
         out = {
             "risk_level": risk_level,
             "final_answer": fallback,
@@ -402,6 +482,10 @@ def chat(req: ChatReq, db: Session = Depends(get_db)):
         follow_up_questions=out.get("follow_up_questions", []),
         disclaimer=out.get("disclaimer", "본 안내는 내부 사례 기반 참고용이며 확정 판단이 아닙니다."),
     )
+
+
+
+
 
 # =========================================================
 # 0) 세션/메시지 저장용 DB 모델

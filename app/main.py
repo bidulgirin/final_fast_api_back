@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.api.v1.router import router as v1_router
-from app.api.v1.endpoints.chat import chat_faiss
+from app.api.v1.endpoints.chat import chat_faiss,chat_guide
 
 # DB 관련 import (Base / engine)
 from app.db.base import Base
@@ -50,6 +50,8 @@ app.include_router(v1_router, prefix="/api/v1")
 # 테스트 라우터는 루트에 붙임 (prefix는 굳이 "" 안 줘도 됨)
 # chat-faiss 라우터 
 app.include_router(chat_faiss.router)
+# chat-guide 라우터임
+app.include_router(chat_guide.router)
 
 
 
