@@ -7,7 +7,7 @@ from app.utils.crypto import decrypt_aes
 from faster_whisper import WhisperModel
 from app.utils.llm import postprocess_stt
 from app.api.v1.endpoints.emotion import load_emotion_model, infer_emotion_probs
-from app.api.v1.endpoints.mfcc import vp_store
+from app.api.v1.endpoints.real_time_check import vp_store
 from app.db.models.phising_sign import ae_detector
 import imageio_ffmpeg
 import tempfile, os, subprocess
