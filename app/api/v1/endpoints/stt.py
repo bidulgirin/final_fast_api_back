@@ -14,8 +14,8 @@ import tempfile, os, subprocess
 
 router = APIRouter()
 
-MODEL_SIZE = "small"
-stt_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+MODEL_SIZE = "large-v3"
+stt_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="int8")
 emotion_model = load_emotion_model("assets/models/emotion_model_android.pt")
 
 

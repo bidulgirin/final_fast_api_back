@@ -11,8 +11,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(
     DATABASE_URL,
-    echo=True,   # SQL 로그 출력
-    pool_pre_ping=True, # 이거 뭐하는건지 ...
+    echo=False,   # SQL 로그 출력
+    pool_pre_ping=True,
 )
 
 SessionLocal = sessionmaker(

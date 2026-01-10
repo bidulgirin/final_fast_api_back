@@ -17,6 +17,9 @@ from app.services.stt_infer import STTInfer, STTInferConfig
 import time
 import logging
 import asyncio
+import logging
+import logging
+# logger = logging.getLogger("mel")
 
 router = APIRouter()
 
@@ -54,13 +57,13 @@ def startup_load_models():
 
     mfcc_infer = MFCCInfer(
         model_path="assets/models/binary_cnn_mfcc.pt",
-        cfg=MFCCInferConfig(device="cpu", target_frames=500),
+        cfg=MFCCInferConfig(device="cuda", target_frames=500),
     )
 
     mel_infer = MelInfer(
         model_path="assets/models/mel_spectrogram_model.pt",
         cfg=MelInferConfig(
-            device="cpu",
+            device="cuda",
             sample_rate=16000,
             segment_sec=5.0,
             n_fft=1024,
@@ -74,7 +77,7 @@ def startup_load_models():
 
     text_infer = TextInfer(
         TextInferConfig(
-            device="cpu",
+            device="cuda",
             ae_path="assets/models/final_ae.pth",
             kobert_path="assets/models/kobert",
             threshold=5500.0,
@@ -86,10 +89,10 @@ def startup_load_models():
     stt_infer = STTInfer(
         STTInferConfig(
             model_size="small",
-            device="cpu",
+            device="cuda",
             compute_type="int8",
             language="ko",
-            vad_filter=True,
+            vad_filter=False,
             beam_size=1,
             best_of=1,
         )
@@ -131,6 +134,7 @@ async def mfcc_mel_fusion_endpoint(
         mel_result = mel_infer.predict_from_pcm_i16(audio_i16)
         mel_score = float(mel_result["phishing_score"])
     except Exception:
+        # logger.exception("MEL inference failed")  
         raise HTTPException(status_code=500, detail="MEL inference failed")
 
     audio_fused = fuse_scores(mfcc_score, mel_score, w_mfcc=0.5, w_mel=0.5)

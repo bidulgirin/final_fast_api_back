@@ -73,7 +73,7 @@ class MFCCInfer:
         self.model = self._load_model(model_path).to(self.device).eval()
 
     def _load_model(self, model_path: str) -> nn.Module:
-        sd = torch.load(model_path, map_location="cpu")
+        sd = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu", weights_only=False)
         if not isinstance(sd, dict):
             raise ValueError(f"Expected state_dict(dict/OrderedDict), got {type(sd)}")
 
