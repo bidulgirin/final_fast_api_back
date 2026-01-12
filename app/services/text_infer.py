@@ -35,7 +35,7 @@ class Autoencoder(nn.Module):
 
 @dataclass
 class TextInferConfig:
-    device: str = "cpu"  # "cuda" or "cpu"
+    device: str = "mps"  # "mps"
     ae_path: str = "assets/models/final_ae.pth"
     kobert_path: str = "assets/models/kobert"  # 로컬 디렉토리 or HF id
     threshold: float = 5500.0
@@ -57,7 +57,7 @@ class TextInfer:
     """
     def __init__(self, cfg: TextInferConfig):
         self.cfg = cfg
-        self.device = torch.device(cfg.device if (cfg.device == "cuda" and torch.cuda.is_available()) else "cpu")
+        self.device = torch.device(cfg.device if (cfg.device == "mps" and torch.mps.is_available()) else "cpu")
 
         # ---- AE + Vectorizer 로드 ----
         ckpt = torch.load(cfg.ae_path, map_location=self.device, weights_only=False)

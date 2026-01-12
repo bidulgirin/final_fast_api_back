@@ -1,25 +1,28 @@
 services:
-    db:
-        image: postgres:16
-        container_name: audio-db
-        environment:
-            POSTGRES_DB: audio
-            POSTGRES_USER: audio
-            POSTGRES_PASSWORD: audio
-        ports:
-            - "5432:5432"
-        volumes:
-            - pgdata:/var/lib/postgresql/data
+  api-cpu:
+    profiles: ["cpu"]
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
 
-        api:
-            build: .
-            env_file:
-            - .env
-            ports:
-            - "8000:8000"
-            volumes:
-            - ./data:/app/data
-            depends_on:
-            - db
-volumes:
-    pgdata:
+  api-gpu:
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]

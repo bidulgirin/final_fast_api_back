@@ -17,7 +17,7 @@ except ImportError as e:
 class STTInferConfig:
     # 1060 3GB면 medium도 빡셀 수 있음. 운영은 small 권장, 최대치로 medium.
     model_size: str = "small"         # tiny / base / small / medium
-    device: str = "cuda"              # "cpu" or "cuda"
+    device: str = "mps"              # "cpu" or "mps" MAC OS 설정
     compute_type: str = "int8"        # 1060 3GB: cuda에서도 int8이 가장 안전
 
     language: str = "ko"

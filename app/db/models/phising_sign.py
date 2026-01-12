@@ -269,7 +269,7 @@ class PhishingDetectorAE:
 
     def __init__(self, model_path: str | Path, kw_store: Optional[FaissKeywordStore] = None):
         self.model_path = str(model_path)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.mps.is_available() else "cpu")
 
         try:
             ckpt = torch.load(self.model_path, map_location=self.device, weights_only=False)

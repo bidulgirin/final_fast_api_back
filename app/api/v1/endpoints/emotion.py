@@ -6,6 +6,16 @@ import soundfile as sf
 LABELS = ["기쁨", "당황", "분노", "불안", "슬픔"]  # => 협박 + 불안등의 라벨링을 추가해야함 중요...
 
 def load_emotion_model(torchscript_path: str, device: str = "cpu") -> torch.jit.ScriptModule:
+
+    # 1) 지원 엔진 확인
+    engines = torch.backends.quantized.supported_engines
+
+    # 2) Android/mobile 모델이면 보통 qnnpack
+    if "qnnpack" in engines:
+        torch.backends.quantized.engine = "qnnpack"
+    elif "fbgemm" in engines:
+        torch.backends.quantized.engine = "fbgemm"
+        
     model = torch.jit.load(torchscript_path, map_location=device)
     model.eval()
     return model

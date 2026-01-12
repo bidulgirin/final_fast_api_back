@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # Android(특히 Termux)는 GPU/CUDA 거의 못 쓴다고 보면 됨
-    DEVICE: str = "cpu"
+    DEVICE: str = "mps"
 
     STT_MODEL_PATH: str = "assets/models/fast-whisper.pt"
     CLS_MODEL_PATH: str = "assets/models/emotion_model_android.pt"
