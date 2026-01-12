@@ -57,13 +57,13 @@ def startup_load_models():
 
     mfcc_infer = MFCCInfer(
         model_path="assets/models/binary_cnn_mfcc.pt",
-        cfg=MFCCInferConfig(device="cuda", target_frames=500),
+        cfg=MFCCInferConfig(device="cpu", target_frames=500),
     )
 
     mel_infer = MelInfer(
         model_path="assets/models/mel_spectrogram_model.pt",
         cfg=MelInferConfig(
-            device="cuda",
+            device="cpu",
             sample_rate=16000,
             segment_sec=5.0,
             n_fft=1024,
@@ -77,7 +77,7 @@ def startup_load_models():
 
     text_infer = TextInfer(
         TextInferConfig(
-            device="cuda",
+            device="cpu",
             ae_path="assets/models/final_ae.pth",
             kobert_path="assets/models/kobert",
             threshold=5500.0,
@@ -89,7 +89,7 @@ def startup_load_models():
     stt_infer = STTInfer(
         STTInferConfig(
             model_size="small",
-            device="cuda",
+            device="cpu",
             compute_type="int8",
             language="ko",
             vad_filter=False,
