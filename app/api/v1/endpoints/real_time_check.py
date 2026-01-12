@@ -1,4 +1,3 @@
-# app/api/routes/mfcc_mel_fusion.py
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import numpy as np
 
@@ -54,10 +53,17 @@ def fuse_three(audio_score: float, text_score: float, w_audio: float = 0.8, w_te
 @router.on_event("startup")
 def startup_load_models():
     global mfcc_infer, mel_infer, text_infer, stt_infer
+    
+
+    # 기존 모델 
+    # mfcc_infer = MFCCInfer(
+    #     model_path="assets/models/binary_cnn_mfcc.pt",
+    #     cfg=MFCCInferConfig(device="cpu", target_frames=500),
+    # )
 
     mfcc_infer = MFCCInfer(
-        model_path="assets/models/binary_cnn_mfcc.pt",
-        cfg=MFCCInferConfig(device="cpu", target_frames=500),
+        model_path="assets/models/best_res2net50_se.pth",
+        cfg=MFCCInferConfig(device="cpu", center=False, target_frames=498),
     )
 
     mel_infer = MelInfer(
@@ -127,6 +133,8 @@ async def mfcc_mel_fusion_endpoint(
     try:
         mfcc_result = mfcc_infer.predict_from_pcm_i16(audio_i16)
         mfcc_score = float(mfcc_result["phishing_score"])
+        print("mfcc_result", mfcc_result )
+        print("mfcc_score", mfcc_score )
     except Exception:
         raise HTTPException(status_code=500, detail="MFCC inference failed")
 
