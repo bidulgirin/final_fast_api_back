@@ -6,6 +6,7 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 # FAISS 스토어 (IndexIDMap2 + remove/update 지원)
+# 피싱 사례 저장하기
 class FaissStore:
     def __init__(self, index_path: str, model_name: str):
         self.index_path = index_path

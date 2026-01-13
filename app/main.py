@@ -15,7 +15,8 @@ from app.faiss.faiss_store import FaissStore
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup
-    Base.metadata.create_all(bind=engine)
+    if os.getenv("AUTO_CREATE_TABLES", "false").lower() == "true":
+        Base.metadata.create_all(bind=engine)
 
     faiss_index_path = os.getenv("FAISS_INDEX_PATH", "./data/index.faiss")
     embed_model_name = os.getenv("EMBED_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")

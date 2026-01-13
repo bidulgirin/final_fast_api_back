@@ -1,9 +1,9 @@
+# faiss 적재를 위함 보이스피싱 사례를 저장하는 db (원문 + 개인정보 마스킹처리함)
 from __future__ import annotations
 
 from sqlalchemy import String, Text, Integer, DateTime, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
-
 class PhisingCaseDocs(Base):
     __tablename__ = "phising_case_docs"
     __table_args__ = (

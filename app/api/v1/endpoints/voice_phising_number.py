@@ -7,7 +7,10 @@ import uuid
 from app.db.session import get_db
 from datetime import datetime
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/voice-phising-number",
+    tags=["voice-phising-number"],
+)
 
 # 스키마 :::: API 입출력 데이터 계약
 class VoicePhisingCreate(BaseModel): # 
