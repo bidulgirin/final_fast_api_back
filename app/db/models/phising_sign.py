@@ -330,13 +330,12 @@ class PhishingDetectorAE:
             return {"result": "✅ 정상", "score": 0.0, "keywords": []}
 
         # ✅ keywords가 안 들어오면 FAISS에서 자동으로 뽑아 사용
-        faiss_hits: List[Dict[str, Any]] = []
-        if (keywords is None) and self.kw_store is not None:
+        if (not keywords) and self.kw_store is not None:
             faiss_hits = self.kw_store.search(sentence, topk=faiss_topk, min_sim=faiss_min_sim)
             keywords = [h["keyword"] for h in faiss_hits]
 
         out = self._score(sentence, keywords=keywords)
-        out["faiss_hits"] = faiss_hits  # 디버깅/설명용(원치 않으면 제거)
+        out["faiss_hits"] = faiss_hits
         return out
 
 

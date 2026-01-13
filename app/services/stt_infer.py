@@ -16,9 +16,9 @@ except ImportError as e:
 @dataclass
 class STTInferConfig:
     # 1060 3GB면 medium도 빡셀 수 있음. 운영은 small 권장, 최대치로 medium.
-    model_size: str = "small"         # tiny / base / small / medium
+    model_size: str = "large-v3"         # tiny / base / small / medium
     device: str = "cuda"              # "cpu" or "cuda"
-    compute_type: str = "int8"        # 1060 3GB: cuda에서도 int8이 가장 안전
+    compute_type: str = "float16"        # 1060 3GB: cuda에서도 int8이 가장 안전
 
     language: str = "ko"
 

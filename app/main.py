@@ -10,6 +10,8 @@ from sqlalchemy import select
 
 from app.api.v1.router import router as v1_router
 from app.api.v1.endpoints.chat import chat_faiss,chat_guide
+from app.api.v1.endpoints import faiss_keywords
+
 
 # DB 관련 import (Base / engine)
 from app.db.base import Base
@@ -52,6 +54,8 @@ app.include_router(v1_router, prefix="/api/v1")
 app.include_router(chat_faiss.router)
 # chat-guide 라우터임
 app.include_router(chat_guide.router)
+# ｆａｉｓｓ ｋｅｙｗｏｒｄ 임
+app.include_router(faiss_keywords.router)
 
 
 

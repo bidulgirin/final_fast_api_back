@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, String, Text, TIMESTAMP
+from sqlalchemy import Column, String, Text, TIMESTAMP, Integer, func
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
@@ -10,6 +10,8 @@ class VoicePhisingNumberList(Base):
     __tablename__ = "voice_phising_number_list"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    number = Column(String(20), nullable=False, unique=True, index=True) # 중복은 저장안하도록 설정해야함
-    description =  Column(Text) # 이번호가 어떤건지 설명 예시 : "여론조사"
-    created_at = Column(TIMESTAMP, server_default="now()")
+    number = Column(String(20), nullable=False, unique=True, index=True)
+    description = Column(Text)
+    report_count = Column(Integer, nullable=False, server_default="1")  
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now()) 

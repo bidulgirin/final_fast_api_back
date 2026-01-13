@@ -2,41 +2,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
-class CNNBinary(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
+from app.models.mfcc_model import Res2Net50SE
 
-            nn.Conv2d(16, 32, 3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
 
-            nn.Conv2d(32, 64, 3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((1, 1))
-        )
-        self.fc = nn.Linear(64, 1)
-
-    def forward(self, x):
-        x = x.unsqueeze(1)   # (B, 1, 40, 500)
-        x = self.conv(x)
-        x = x.view(x.size(0), -1)
-        return self.fc(x).squeeze(1)
-    
-    
 @dataclass
 class MFCCInferConfig:
     sr: int = 16000
@@ -46,9 +22,16 @@ class MFCCInferConfig:
     n_mels: int = 64
     n_fft: int = 400
     hop_length: int = 160
-    center: bool = True
 
-    target_frames: int = 500  # 학습에서 MAX_LEN=500으로 잘랐음
+    # Res2Net 샘플 코드 기준이면 False (5초 -> T=498)
+    # CNNBinary 학습 파이프라인이 center=True였다면 그건 CNNBinary에만 맞던 설정일 가능성 큼
+    center: bool = False
+
+    # 프레임을 강제로 맞출지 옵션으로 둠
+    # - None: MFCC 나온 그대로 사용 (보통 498)
+    # - 500: 예전처럼 pad/trunc로 500 고정
+    target_frames: Optional[int] = 498
+
     device: str = "cpu"
 
 
@@ -72,30 +55,54 @@ class MFCCInfer:
 
         self.model = self._load_model(model_path).to(self.device).eval()
 
+    def _unwrap_state_dict(self, ckpt: Any) -> Dict[str, torch.Tensor]:
+        if isinstance(ckpt, dict) and "state_dict" in ckpt and isinstance(ckpt["state_dict"], dict):
+            ckpt = ckpt["state_dict"]
+
+        if not isinstance(ckpt, dict):
+            raise ValueError(f"Expected state_dict(dict), got {type(ckpt)}")
+
+        if any(k.startswith("module.") for k in ckpt.keys()):
+            ckpt = {k.replace("module.", "", 1): v for k, v in ckpt.items()}
+
+        return ckpt
+
     def _load_model(self, model_path: str) -> nn.Module:
-        sd = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu", weights_only=False)
-        if not isinstance(sd, dict):
-            raise ValueError(f"Expected state_dict(dict/OrderedDict), got {type(sd)}")
+        ckpt = torch.load(model_path, map_location=self.device, weights_only=False)
+        sd = self._unwrap_state_dict(ckpt)
 
-        # DataParallel 저장이면 "module." 제거
-        sd = {k.replace("module.", "", 1): v for k, v in sd.items()}
-
-        model = CNNBinary()
+        model = Res2Net50SE()
         model.load_state_dict(sd, strict=True)
         return model
 
     @torch.inference_mode()
     def predict_from_pcm_i16(self, audio_i16: np.ndarray) -> Dict[str, Any]:
-        x, raw_T = self._pcm_to_model_input(audio_i16)  # x: (1, 40, 500)
+        x, raw_T = self._pcm_to_model_input(audio_i16)  # x: (1, 40, T)
 
-        logits = self.model(x)                 # (1,)
-        prob = torch.sigmoid(logits)[0].item() # 0~1
+        out = self.model(x)  # 보통 (1,2)
+
+        if out.dim() == 2 and out.size(1) == 2:
+            probs = F.softmax(out, dim=1)
+            spoof_prob = probs[0, 1].item()
+            logit = (out[0, 1] - out[0, 0]).item()
+        else:
+            # 혹시 단일 logit 모델이면 fallback
+            logit = float(out[0].item())
+            spoof_prob = float(torch.sigmoid(out)[0].item())
+
+         # threshold 적용: 넘으면 1, 아니면 0
+        threshold = getattr(self.cfg, "threshold", 0.2893)
+        phishing_score = 1 if spoof_prob >= threshold else 0
 
         return {
-            "phishing_score": float(prob),
-            "logits": float(logits[0].item()),
-            "raw_T": int(raw_T),               # MFCC 원래 프레임 수(보통 501)
+            "phishing_score": int(phishing_score),   # 0 or 1
+            "spoof_prob": float(spoof_prob),         # (원하면 디버깅/로깅용으로 유지)
+            "threshold": float(threshold),
+            "logits": float(logit),
+            "raw_T": int(raw_T),
             "input_shape": tuple(x.shape),
+            "center": bool(self.cfg.center),
+            "target_frames": self.cfg.target_frames,
         }
 
     def _pcm_to_model_input(self, audio_i16: np.ndarray) -> Tuple[torch.Tensor, int]:
@@ -106,25 +113,31 @@ class MFCCInfer:
         # PCM16 -> float waveform (-1~1)
         wav = audio_i16.astype(np.float32) / 32768.0
 
-        # 학습과 동일하게 5초(80000)로 pad/trunc
+        # 2. 음량 정규화 추가 (이게 소리가 작아서 발생하는 오탐을 잡아줍니다)
+        max_val = np.abs(wav).max()
+        if max_val > 1e-6:
+            wav = wav / max_val * 0.9
+
+        # 5초(80000) pad/trunc
         if wav.shape[0] > self.max_samples:
             wav = wav[: self.max_samples]
         elif wav.shape[0] < self.max_samples:
             wav = np.pad(wav, (0, self.max_samples - wav.shape[0]), mode="constant")
 
-        wav = torch.from_numpy(wav).to(self.device).unsqueeze(0)  # (1, N)
+        wav_t = torch.from_numpy(wav).to(self.device).unsqueeze(0)  # (1, N)
 
         # MFCC: (1, 40, T)
-        mfcc = self.mfcc_transform(wav)  # (1, 40, T)
-        mfcc = mfcc.squeeze(0)           # (40, T)
+        mfcc = self.mfcc_transform(wav_t)  # (1, 40, T)
+        mfcc = mfcc.squeeze(0)             # (40, T)
         raw_T = mfcc.shape[1]
 
-        # 학습과 동일하게 T를 500으로 고정 (501 -> 500 잘림)
+        # 필요하면 T 고정
         target = self.cfg.target_frames
-        if raw_T > target:
-            mfcc = mfcc[:, :target]
-        elif raw_T < target:
-            mfcc = F.pad(mfcc, (0, target - raw_T))
+        if target is not None:
+            if raw_T > target:
+                mfcc = mfcc[:, :target]
+            elif raw_T < target:
+                mfcc = F.pad(mfcc, (0, target - raw_T))
 
-        x = mfcc.unsqueeze(0).float()    # (1, 40, 500)
+        x = mfcc.unsqueeze(0).float()      # (1, 40, T)
         return x, raw_T
