@@ -12,7 +12,10 @@ from app.db.models.phising_sign import ae_detector
 import imageio_ffmpeg
 import tempfile, os, subprocess
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/stt",
+    tags=["stt"],
+)
 
 MODEL_SIZE = "large-v3"
 stt_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="int8")
@@ -55,6 +58,7 @@ async def _run_stt_only(wav_path: str) -> str:
             beam_size=5,
             vad_filter=True,
         )
+        print("_info", _info)
         return "".join(seg.text for seg in segments).strip()
 
     return await run_in_threadpool(_sync)

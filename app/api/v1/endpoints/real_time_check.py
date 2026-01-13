@@ -18,12 +18,11 @@ import logging
 import asyncio
 import logging
 import logging
-# logger = logging.getLogger("mel")
 
-router = APIRouter()
-
-# logger = logging.getLogger("vp")
-# logger.setLevel(logging.INFO)
+router = APIRouter(
+    prefix="/real_time",
+    tags=["real_time"],
+)
 
 mfcc_infer: MFCCInfer | None = None
 mel_infer: MelInfer | None = None
