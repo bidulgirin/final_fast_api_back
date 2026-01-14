@@ -7,7 +7,7 @@ from app.utils.crypto import decrypt_aes
 from app.services.vp_store import VoicePhishingStore
 
 from app.services.mfcc_infer import MFCCInfer, MFCCInferConfig
-from app.services.mel_infer import MelInfer, MelInferConfig
+from app.services.mel_best_infer import MelBestInfer, MelInferConfig
 
 from app.services.stt_store import STTBufferStore
 from app.services.text_infer import TextInfer, TextInferConfig
@@ -25,7 +25,7 @@ router = APIRouter(
 )
 
 mfcc_infer: MFCCInfer | None = None
-mel_infer: MelInfer | None = None
+mel_infer: MelBestInfer | None = None
 text_infer: TextInfer | None = None
 stt_infer: STTInfer | None = None
 
@@ -64,19 +64,32 @@ def startup_load_models():
         model_path="assets/models/best_res2net50_se.pth",
         cfg=MFCCInferConfig(device="cpu", center=False, target_frames=498),
     )
-
-    mel_infer = MelInfer(
-        model_path="assets/models/mel_spectrogram_model.pt",
+    # 최신모델로 변경
+    # mel_infer = MelBestInfer(
+    #     model_path="assets/models/best_voice_model.pth",
+    #     cfg=MelInferConfig(
+    #         device="cpu",
+    #         sample_rate=16000,
+    #         segment_sec=5.0,
+    #         n_fft=1024,
+    #         hop_length=256,
+    #         n_mels=128,
+    #         fmin=20,
+    #         fmax=8000,
+    #         img_size=224,
+    #     ),
+    # )
+    mel_infer = MelBestInfer(
+        model_path="assets/models/best_voice_model.pth",
         cfg=MelInferConfig(
             device="cpu",
-            sample_rate=16000,
+            input_sample_rate=16000,   # 서버로 들어오는 PCM이 16k라면
+            target_sample_rate=22050,  # 학습/문서 기준
             segment_sec=5.0,
-            n_fft=1024,
-            hop_length=256,
-            n_mels=128,
-            fmin=20,
-            fmax=8000,
+            n_mels=224,
+            hop_length=512,
             img_size=224,
+            threshold=0.6,
         ),
     )
 

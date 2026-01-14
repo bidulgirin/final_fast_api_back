@@ -48,22 +48,47 @@ class Autoencoder(nn.Module):
 # ----------------------------
 # 2) 마스킹(전처리)
 # ----------------------------
-def advanced_deidentify(text: str) -> str:
-    """
-    키워드/문장 임베딩 전에 개인정보를 마스킹해서
-    TF-IDF 공간에서 유사도가 의미있게 나오도록 처리
-    """
-    if not isinstance(text, str):
-        return ""
-    titles = r"님|씨|과장|팀장|대리|부장|차장|주임|선생님|교수님"
-    text = re.sub(rf'([가-힣]{{2,4}})({titles})', r'[NAME]\2', text)
-    text = re.sub(r'([가-힣]{{2,4}})\s*(수사관|검사|사무관|조사관|드림|올림)', r'[NAME] \2', text)
+# def advanced_deidentify(text: str) -> str:
+#     """
+#     키워드/문장 임베딩 전에 개인정보를 마스킹해서
+#     TF-IDF 공간에서 유사도가 의미있게 나오도록 처리
+#     """
+#     if not isinstance(text, str):
+#         return ""
+#     titles = r"님|씨|과장|팀장|대리|부장|차장|주임|선생님|교수님"
+#     text = re.sub(rf'([가-힣]{{2,4}})({titles})', r'[NAME]\2', text)
+#     text = re.sub(r'([가-힣]{{2,4}})\s*(수사관|검사|사무관|조사관|드림|올림)', r'[NAME] \2', text)
+#     text = re.sub(r'\d{2,3}-\d{3,4}-\d{4}', '[TEL]', text)
+#     text = re.sub(r'\d{10,14}', '[ACC]', text)
+#     text = re.sub(r'http[s]?://\S+', '[URL]', text)
+#     text = re.sub(r'\d{4,}', '[NUM]', text)
+#     return text
+
+
+def advanced_deidentify(text):
+    if not isinstance(text, str): return ""
+    
+    # 1. 상세 이름 및 호칭/직위 결합 (성함, 고객님, 수사관 등)
+    titles = r"님|씨|과장|팀장|대리|부장|차장|주임|선생님|교수님|수사관|검사|사무관|조사관"
+    text = re.sub(rf'([가-힣]{{2,4}})\s*({titles})', r'[NAME] \2', text)
+    
+    # 2. 주소 (도로명 주소 및 지번 주소 패턴)
+    # ~~시/도 ~~구/군 ~~동/읍/면/로/길 및 번지수 대응
+    addr_pattern = r'([가-힣]+[시도]\s+)?[가-힣]+[구군]\s+[가-힣\d]+(동|읍|면|로|길)(\s+\d+(-?\d+)?)?'
+    text = re.sub(addr_pattern, '[ADDR]', text)
+    
+    # 3. 주민등록번호 (앞뒤 13자리 및 성별 구분자 포함)
+    text = re.sub(r'\d{6}-[1-4]\d{6}', '[ID_NUM]', text)
+    
+    # 4. 전화번호 및 계좌번호
     text = re.sub(r'\d{2,3}-\d{3,4}-\d{4}', '[TEL]', text)
     text = re.sub(r'\d{10,14}', '[ACC]', text)
+    
+    # 5. 기타 (URL, 4자리 이상의 연속 숫자)
     text = re.sub(r'http[s]?://\S+', '[URL]', text)
     text = re.sub(r'\d{4,}', '[NUM]', text)
+    
     return text
-
 
 def _stable_id_from_text(s: str) -> int:
     """

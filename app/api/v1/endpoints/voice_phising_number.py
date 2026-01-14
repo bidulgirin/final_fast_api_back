@@ -8,8 +8,8 @@ from app.db.session import get_db
 from datetime import datetime
 
 router = APIRouter(
-    prefix="/voice-phising-number",
-    tags=["voice-phising-number"],
+    prefix="/voice_phising_number",
+    tags=["voice_phising_number"],
 )
 
 # 스키마 :::: API 입출력 데이터 계약
