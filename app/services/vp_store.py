@@ -23,6 +23,7 @@ class VoicePhishingStore:
         self._last_call_id: str | None = None
         
     async def add_score(self, call_id: str, score: float) -> None:
+        print("call_id : ", call_id)
         async with self._lock:
             self._last_call_id = call_id
             item = self._data.get(call_id)

@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-import logging
-import traceback
 
 from app.db.session import get_db
 from app.schemas.chat import (
@@ -14,7 +12,6 @@ from app.services.openai_service import ask_openai
 from app.crud.chat import get_conversation, get_messages_by_conversation
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-# logger = logging.getLogger(__name__)
 
 @router.post("/log", response_model=LogMessageResponse)
 def log_message(payload: LogMessageRequest, db: Session = Depends(get_db)):

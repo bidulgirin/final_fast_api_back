@@ -52,44 +52,25 @@ def fuse_three(audio_score: float, text_score: float, w_audio: float = 0.8, w_te
 @router.on_event("startup")
 def startup_load_models():
     global mfcc_infer, mel_infer, text_infer, stt_infer
-    
-
-    # 기존 모델 
-    # mfcc_infer = MFCCInfer(
-    #     model_path="assets/models/binary_cnn_mfcc.pt",
-    #     cfg=MFCCInferConfig(device="cpu", target_frames=500),
-    # )
-
+    print("시작이다!!! 시작이다!!!")
     mfcc_infer = MFCCInfer(
         model_path="assets/models/best_res2net50_se.pth",
         cfg=MFCCInferConfig(device="cpu", center=False, target_frames=498),
     )
-    # 최신모델로 변경
-    # mel_infer = MelBestInfer(
-    #     model_path="assets/models/best_voice_model.pth",
-    #     cfg=MelInferConfig(
-    #         device="cpu",
-    #         sample_rate=16000,
-    #         segment_sec=5.0,
-    #         n_fft=1024,
-    #         hop_length=256,
-    #         n_mels=128,
-    #         fmin=20,
-    #         fmax=8000,
-    #         img_size=224,
-    #     ),
-    # )
+   
     mel_infer = MelBestInfer(
-        model_path="assets/models/best_voice_model.pth",
+        model_path="assets/models/best_model_tuning.pth",
         cfg=MelInferConfig(
             device="cpu",
-            input_sample_rate=16000,   # 서버로 들어오는 PCM이 16k라면
-            target_sample_rate=22050,  # 학습/문서 기준
-            segment_sec=5.0,
+            input_sample_rate=16000,
+            target_sample_rate=22050,
+            duration_sec=5, 
             n_mels=224,
             hop_length=512,
             img_size=224,
             threshold=0.6,
+            model_name="res2net50_26w_4s",
+            num_classes=2,
         ),
     )
 
