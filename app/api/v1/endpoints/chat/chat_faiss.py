@@ -63,6 +63,9 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 
 
+# 수정사항 2026.01.15
+# 키워드 추출해서 채팅방에서 사용할수있도록 저장해야함 
+
 # --- OpenAI Client (앱 시작 시 1회 생성 권장) ---
 _openai_client: Optional[OpenAI] = None
 

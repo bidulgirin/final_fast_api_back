@@ -18,8 +18,8 @@ router = APIRouter(
 )
 
 MODEL_SIZE = "large-v3"
-stt_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="int8")
-emotion_model = load_emotion_model("assets/models/emotion_model_android.pt")
+stt_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
+emotion_model = load_emotion_model("assets/models/emotion_model_android.pt") # 감성분류모델(교체해야함)
 
 
 def _normalize(v: str, default: str) -> str:

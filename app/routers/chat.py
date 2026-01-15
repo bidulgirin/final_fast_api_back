@@ -36,9 +36,6 @@ def send(payload: SendChatRequest, db: Session = Depends(get_db)):
         if not assistant_text:
             assistant_text = "답변 생성에 실패했습니다. 잠시 후 다시 시도해주세요."
     except Exception as e:
-        # 무조건 콘솔에 남기기
-        # logger.exception("OpenAI error in /chat/send")
-        # traceback.print_exc()
 
         # 클라이언트에도 타입/메시지 내려서 Android에서 확인 가능하게
         raise HTTPException(
