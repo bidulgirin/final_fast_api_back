@@ -1,7 +1,9 @@
 from pydantic import BaseModel
+from typing import Optional
 
 class GoogleLoginRequest(BaseModel):
     idToken: str  # Android가 보내는 구글 idToken
+    nickname: Optional[str] = None
 
 class UserOut(BaseModel):
     id: str
@@ -14,3 +16,14 @@ class GoogleLoginResponse(BaseModel):
     accessToken: str
     isNewUser: bool
     user: UserOut
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str

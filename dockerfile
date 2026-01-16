@@ -13,5 +13,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 RUN mkdir -p /app/data
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 시작할때 worker 1 으로 안하면 터짐ㅠㅠ 모델 수가 많아서 어쩔수없삼
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000","--workers","1"]

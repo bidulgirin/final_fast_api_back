@@ -1,5 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import numpy as np
+import os
+os.environ["CT2_CUDA_ALLOCATOR"] = "cuda_malloc_async"  # Python import 전에
 
 from starlette.concurrency import run_in_threadpool
 
@@ -14,9 +16,7 @@ from app.services.text_infer import TextInfer, TextInferConfig
 
 from app.services.stt_infer import STTInfer, STTInferConfig
 import time
-import logging
 import asyncio
-import logging
 import logging
 
 router = APIRouter(
@@ -31,6 +31,9 @@ stt_infer: STTInfer | None = None
 
 vp_store = VoicePhishingStore(ttl_sec=60 * 60)
 stt_store = STTBufferStore(ttl_sec=60 * 60, max_keep=50)
+
+# 중복호출을 막기 위한 lock
+_load_lock = asyncio.Lock()
 
 
 def fuse_scores(mfcc_score: float, mel_score: float, w_mfcc: float = 0.5, w_mel: float = 0.5) -> float:
@@ -49,10 +52,17 @@ def fuse_three(audio_score: float, text_score: float, w_audio: float = 0.8, w_te
     return float(min(1.0, max(0.0, v)))
 
 
-@router.on_event("startup")
-def startup_load_models():
+async def startup_load_models():
     global mfcc_infer, mel_infer, text_infer, stt_infer
-    print("시작이다!!! 시작이다!!!")
+
+    async with _load_lock:
+        # stt_infer ::: 이게 젤 무겁고 후반에 로드되어서 이건만 체크~~
+        print("시작!!!")
+        if stt_infer is not None:
+            print("이미 stt_infer 로드됨")
+            return
+
+        print("모델 로드 중...")
     mfcc_infer = MFCCInfer(
         model_path="assets/models/best_res2net50_se.pth",
         cfg=MFCCInferConfig(device="cpu", center=False, target_frames=498),

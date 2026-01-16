@@ -5,7 +5,14 @@ from sqlalchemy import select
 from app.api.v1.deps import get_db
 from app.core.google_verify import verify_google_id_token
 from app.core.jwt_utils import create_access_token
-from app.schemas.auth import GoogleLoginRequest, GoogleLoginResponse, UserOut
+from app.schemas.auth import (
+    GoogleLoginRequest,
+    GoogleLoginResponse,
+    UserOut,
+    RegisterRequest,
+    LoginRequest,
+)
+from app.utils.security import hash_password, verify_password
 
 from app.db.models import User
 
@@ -27,6 +34,7 @@ def google_login(body: GoogleLoginRequest, db: Session = Depends(get_db)):
     email = payload.get("email")
     name = payload.get("name")
     picture = payload.get("picture")
+    nickname = payload.get("nickname")
 
     if not google_sub or not email:
         raise HTTPException(status_code=400, detail="Google payload missing sub/email")
@@ -69,3 +77,38 @@ def google_login(body: GoogleLoginRequest, db: Session = Depends(get_db)):
             nickname=user.nickname,
         )
     )
+
+
+@router.post("/register")
+def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    # 이메일 중복 체크
+    existing = db.execute(select(User).where(User.email == body.email)).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    user = User(
+        google_sub=None,
+        email=body.email,
+        name=body.name,
+        nickname=None,
+        password_hash=hash_password(body.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    access_token = create_access_token(str(user.id))
+    return {"accessToken": access_token, "isNewUser": True, "user": {"id": str(user.id), "email": user.email}}
+
+
+@router.post("/login")
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.execute(select(User).where(User.email == body.email)).scalar_one_or_none()
+    if user is None or not user.password_hash:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    access_token = create_access_token(str(user.id))
+    return {"accessToken": access_token, "user": {"id": str(user.id), "email": user.email}}

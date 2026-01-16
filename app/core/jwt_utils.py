@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+from jose import jwt, JWTError
 from app.core.config import settings
+
 
 def create_access_token(user_id: str) -> str:
     """
@@ -16,3 +17,22 @@ def create_access_token(user_id: str) -> str:
         "exp": int(exp.timestamp()),
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALG)
+
+
+def decode(token: str, secret: str | None = None, algorithms: list | None = None) -> dict:
+    """Decode and verify a JWT.
+
+    - If `secret` or `algorithms` are not provided, use defaults from `settings`.
+    - Raises `jose.JWTError` on failure so callers can handle authentication errors.
+    """
+    if secret is None:
+        secret = settings.JWT_SECRET
+    if algorithms is None:
+        algorithms = [settings.JWT_ALG]
+
+    try:
+        payload = jwt.decode(token, secret, algorithms=algorithms)
+        return payload
+    except JWTError:
+        # propagate so callers (e.g., deps) can catch and return 401
+        raise

@@ -1,5 +1,7 @@
 annotated-doc==0.0.4
 annotated-types==0.7.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
 anyio==4.12.1
 audioread==3.1.0
 av==16.1.0
@@ -39,10 +41,6 @@ lazy_loader==0.4
 librosa==0.11.0
 llvmlite==0.46.0
 MarkupSafe @ file:///C:/b/abs_a0ma7ge0jc/croot/markupsafe_1738584052792/work
-mkl-service==2.4.0
-mkl_fft @ file:///C:/Users/dev-admin/mkl/mkl_fft_1730823082242/work
-mkl_random @ file:///C:/Users/dev-admin/mkl/mkl_random_1730822522280/work
-mpmath @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/mpmath_1699484863771/work
 msgpack==1.1.2
 networkx @ file:///C:/miniconda3/conda-bld/networkx_1765378655825/work
 numba==0.63.1

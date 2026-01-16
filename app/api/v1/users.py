@@ -23,7 +23,9 @@ def update_me(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+
     user.nickname = body.nickname
+
     db.commit()
     db.refresh(user)
 

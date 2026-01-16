@@ -14,7 +14,8 @@ from app.faiss.faiss_store import FaissStore
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # startup
+
+    
     if os.getenv("AUTO_CREATE_TABLES", "false").lower() == "true":
         Base.metadata.create_all(bind=engine)
 
@@ -28,6 +29,13 @@ async def lifespan(app: FastAPI):
     app.state.faiss_store = FaissStore(index_path=faiss_index_path, model_name=embed_model_name)
     app.state.data_dir = data_dir
     app.state.faiss_index_path = faiss_index_path
+
+    # Load real_time endpoint models once at app startup (avoid router-level startup handlers)
+    try:
+        from app.api.v1.endpoints import real_time_check as rtc
+        await rtc.startup_load_models()
+    except Exception as e:
+        print("Warning: real_time model loading failed:", e)
 
     yield
 
