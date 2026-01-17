@@ -44,6 +44,7 @@ class STTInfer:
         self.cfg = cfg
 
         # ⚠️ WhisperModel 생성자에는 temperature/vad_filter 등이 들어가면 안 됨
+        # Initialize once; model load is expensive and should be reused.
         self.model = WhisperModel(
             cfg.model_size,
             device=cfg.device,
@@ -74,6 +75,7 @@ class STTInfer:
             audio_i16 = audio_i16.astype(np.int16, copy=False)
 
         # 너무 짧으면 스킵(예: 0.2초 미만)
+        # Avoid very short chunks that tend to be silence or noise.
         if sample_rate == 16000 and audio_i16.size < 3200:
             return ""
 

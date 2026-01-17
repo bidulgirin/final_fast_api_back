@@ -33,6 +33,7 @@ vp_store = VoicePhishingStore(ttl_sec=60 * 60)
 stt_store = STTBufferStore(ttl_sec=60 * 60, max_keep=50)
 
 # 중복호출을 막기 위한 lock
+# Prevent concurrent model loads on startup.
 _load_lock = asyncio.Lock()
 
 
@@ -95,6 +96,7 @@ async def startup_load_models():
     )
 
     # 서버 STT(Whisper) 로드
+    # Load heavy STT model once to avoid per-request overhead.
     stt_infer = STTInfer(
         STTInferConfig(
             model_size="large-v3",
@@ -132,6 +134,8 @@ async def mfcc_mel_fusion_endpoint(
     if audio_i16.size == 0:
         raise HTTPException(status_code=400, detail="Decoded PCM is empty")
 
+    # Audio-model inference (MFCC + MEL) for fast risk scoring.
+
     # ----- 오디오 모델 추론 -----
     try:
         mfcc_result = mfcc_infer.predict_from_pcm_i16(audio_i16)
@@ -155,6 +159,8 @@ async def mfcc_mel_fusion_endpoint(
     text_risk = 0.0
     should_alert = False
     stt_text = ""
+
+    # STT is CPU/GPU heavy, so keep the event loop responsive.
 
     # STT는 시간이 걸리므로 threadpool에서 실행
     try:
@@ -181,11 +187,12 @@ async def mfcc_mel_fusion_endpoint(
             should_alert = True
 
     # ----- 최종 fused_score -----
-    final_fused = audio_fused if text_payload is None else fuse_three(audio_fused, text_risk, w_audio=0.8, w_text=0.2)
+    # Final score favors audio, but allows text risk to lift the result.
+    final_fused = audio_fused if text_payload is None else fuse_three(audio_fused, text_risk, w_audio=0.5, w_text=0.5)
 
     await vp_store.add_score(call_id, final_fused)
 
-    if final_fused >= 0.85:
+    if final_fused >= 0.9:
         should_alert = True
         
     dt_ms = (time.perf_counter() - t0) * 1000.0

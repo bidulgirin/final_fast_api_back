@@ -49,9 +49,11 @@ class VoicePhishingStore:
         max_score = max(scores)
 
         # 추천 집계: mean + max 혼합
+        # Blend mean + max to reduce noise while keeping peaks.
         final_score = 0.7 * mean_score + 0.3 * max_score
 
         # 최종 플래그 룰
+        # Simple threshold decision for alerting.
         flag = final_score >= 0.5
 
         debug = {

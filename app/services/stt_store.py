@@ -36,6 +36,7 @@ class STTBufferStore:
 
             st.texts.append((now, text))
             st.updated_at = now
+            # Keep only the most recent chunks to bound memory.
 
             # 너무 많이 쌓이면 앞쪽 제거
             if len(st.texts) > self.max_keep:

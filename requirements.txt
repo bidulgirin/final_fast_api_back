@@ -94,3 +94,4 @@ urllib3 @ file:///C:/Users/task_176781037409812/croot/urllib3_1767810504598/work
 uvicorn==0.40.0
 wheel==0.45.1
 win_inet_pton @ file:///C:/miniconda3/conda-bld/win_inet_pton_1761746278813/work
+passlib[argon2]==1.7.4

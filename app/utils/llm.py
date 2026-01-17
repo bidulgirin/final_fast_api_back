@@ -78,6 +78,12 @@ def _simple_keyword_fallback(text: str, max_k: int = 5) -> list[str]:
     return out
 
 
+def _simple_community_fallback(text: str) -> list[str]:
+    if not text or not text.strip():
+        return []
+    return [f"a: {text.strip()}"]
+
+
 def postprocess_stt(
     text: str,
     is_voicephishing: bool,
@@ -90,11 +96,12 @@ def postprocess_stt(
       "voicephishingScore": float,
       "category": str|null,
       "summary": str,
-      "keywords": string[]   # <= 5
+      "keywords": string[],   # <= 5
+      "community": string[]   # ["a: ...", "b: ...", "a: ..."]
     }
 
     - is_voicephishing / score 는 외부에서 주어진 값을 그대로 사용(재판단 금지)
-    - LLM은 category/summary/keywords 작성에 집중
+    - LLM은 category/summary/keywords/community 작성에 집중
     """
     # 빈 텍스트 처리
     if not text or not text.strip():
@@ -104,6 +111,7 @@ def postprocess_stt(
             "category": None,
             "summary": "",
             "keywords": [],
+            "community": [],
         }
 
     prompt = f"""
@@ -130,7 +138,8 @@ def postprocess_stt(
   "voicephishingScore": number,
   "category": "기관사칭" | "투자사기" | "채용빙자" | "납치협박" | "가족,지인사칭" | null,
   "summary": string,
-  "keywords": string[]
+  "keywords": string[],
+  "community": string[]
 }}
 
 STT 원문:
@@ -138,6 +147,7 @@ STT 원문:
 {text}
 >>>
 """.strip()
+    prompt += "\n\nCOMMUNITY: Provide speaker-segmented utterances as an array. Example: [\"a: ...\", \"b: ...\", \"a: ...\"]. If unclear, return a single item like \"a: <text>\"."
 
     resp = client.responses.create(
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini-2024-07-18"),
@@ -161,6 +171,7 @@ STT 원문:
             "category": None,
             "summary": resp.output_text.strip(),
             "keywords": fallback_keywords,
+            "community": _simple_community_fallback(text),
         }
 
     # 외부 판정값 강제
@@ -209,5 +220,15 @@ STT 원문:
         norm = _simple_keyword_fallback(base, KEYWORDS_MAX)
 
     data["keywords"] = norm
+
+    # ensure community
+    community = data.get("community", [])
+    if not isinstance(community, list):
+        community = []
+    community = [c.strip() for c in community if isinstance(c, str)]
+    community = [c for c in community if c]
+    if not community:
+        community = _simple_community_fallback(text)
+    data["community"] = community
 
     return data

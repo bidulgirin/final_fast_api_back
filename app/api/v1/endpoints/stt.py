@@ -6,7 +6,7 @@ from starlette.concurrency import run_in_threadpool
 from app.utils.crypto import decrypt_aes
 from faster_whisper import WhisperModel
 from app.utils.llm import postprocess_stt
-from app.api.v1.endpoints.emotion import load_emotion_model, infer_emotion_probs
+# from app.api.v1.endpoints.emotion import load_emotion_model, infer_emotion_probs  # emotion model disabled
 from app.api.v1.endpoints.real_time_check import vp_store
 from app.db.models.phising_sign import ae_detector
 import imageio_ffmpeg
@@ -19,7 +19,8 @@ router = APIRouter(
 
 MODEL_SIZE = "large-v3"
 stt_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
-emotion_model = load_emotion_model("assets/models/emotion_model_android.pt") # 감성분류모델(교체해야함)
+# emotion_model = load_emotion_model("assets/models/emotion_model_android.pt") # 감성분류모델(교체해야함)  # emotion model disabled
+emotion_model = None
 
 
 def _normalize(v: str, default: str) -> str:
@@ -74,13 +75,13 @@ async def _run_pipeline_wav(
 ) -> dict:
     emotion_probs = None
     emotion_top = None
-    if run_emotion:
-        try:
-            emotion_probs = await run_in_threadpool(infer_emotion_probs, emotion_model, wav_path)
-            emotion_top = max(emotion_probs.items(), key=lambda x: x[1])[0] if emotion_probs else None
-        except Exception:
-            emotion_probs = None
-            emotion_top = None
+    # if run_emotion:
+        # try:
+            # emotion_probs = await run_in_threadpool(infer_emotion_probs, emotion_model, wav_path)
+            # emotion_top = max(emotion_probs.items(), key=lambda x: x[1])[0] if emotion_probs else None
+        # except Exception:
+            # emotion_probs = None
+            # emotion_top = None
 
     text = await _run_stt_only(wav_path)
 
@@ -179,14 +180,14 @@ async def stt_endpoint(
 
         convert_m4a_to_wav(m4a_path, wav_path)
 
-        # (1) 감정분류
+        # (1) 감정분류 (모델 비활성화)
         emotion_probs = None
         emotion_top = None
-        try:
-            emotion_probs = await run_in_threadpool(infer_emotion_probs, emotion_model, wav_path)
-            emotion_top = max(emotion_probs.items(), key=lambda x: x[1])[0] if emotion_probs else None
-        except Exception as e:
-            print("Emotion inference failed:", e)
+        # try:
+        #     emotion_probs = await run_in_threadpool(infer_emotion_probs, emotion_model, wav_path)
+        #     emotion_top = max(emotion_probs.items(), key=lambda x: x[1])[0] if emotion_probs else None
+        # except Exception as e:
+        #     print("Emotion inference failed:", e)
 
         # STT
         segments, info = stt_model.transcribe(
