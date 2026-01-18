@@ -98,7 +98,18 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     db.refresh(user)
 
     access_token = create_access_token(str(user.id))
-    return {"accessToken": access_token, "isNewUser": True, "user": {"id": str(user.id), "email": user.email}}
+    print("Registered new user:", user.email)
+    return {
+        "accessToken": access_token,
+        "isNewUser": True,
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture,
+            "nickname": user.nickname,
+        },
+    }
 
 
 @router.post("/login")
@@ -111,4 +122,14 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(str(user.id))
-    return {"accessToken": access_token, "user": {"id": str(user.id), "email": user.email}}
+    return {
+        "accessToken": access_token,
+        "isNewUser": False,
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture,
+            "nickname": user.nickname,
+        },
+    }

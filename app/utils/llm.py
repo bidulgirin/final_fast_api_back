@@ -16,7 +16,8 @@ SYSTEM_PROMPT = """
 
 규칙:
 - 원문에 없는 내용을 지어내지 않는다. 과한 추측 금지.
-- 개인정보(주민번호/계좌/주소/전화번호/인증번호/카드번호 등)가 있으면 마스킹한다.
+- 개인정보(이름/주민번호/계좌/주소/전화번호/이메일/인증번호/카드번호 등)가 있으면 마스킹한다.
+- 마스킹은 보편적으로 쓰는 형태를 사용한다. (예: 홍*동, 010-****-5678)
 - 키워드에는 개인정보/마스킹된 값/숫자열을 넣지 않는다.
 - 말투는 부드럽고 이해하기 쉽게 한다.
 - 출력은 반드시 JSON 하나만 반환한다. (추가 텍스트 금지)
@@ -30,6 +31,68 @@ STOPWORDS = {
     # 흔한 조사/어미 느낌 토큰이 섞일 때 대비(완벽하진 않음)
     "은", "는", "이", "가", "을", "를", "에", "에서", "으로", "로", "와", "과", "도",
 }
+
+NAME_LABEL_PATTERN = re.compile(
+    r"(?P<label>(이름|성명|고객명|수취인|예금주|계좌주|담당자|대표자)\s*(?:[:：]|은|는)?\s*)(?P<name>[가-힣]{2,4})"
+)
+NAME_SUFFIX_PATTERN = re.compile(r"(?<![가-힣])(?P<name>[가-힣]{2,4})(?=\s*(?:님|씨))")
+RRN_PATTERN = re.compile(r"(?<!\d)(\d{6})[-\s]?([1-4]\d{6})(?!\d)")
+PHONE_PATTERN = re.compile(r"(?<!\d)(0\d{1,2})[-\s]?(\d{3,4})[-\s]?(\d{4})(?!\d)")
+CARD_PATTERN = re.compile(r"(?<!\d)(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})(?!\d)")
+EMAIL_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})(?![A-Za-z0-9._%+-])"
+)
+ACCOUNT_LABEL_PATTERN = re.compile(
+    r"(?P<label>(계좌번호|계좌|입금계좌|송금계좌)\s*(?:[:：]|은|는)?\s*)(?P<num>\d{2,4}[-\s]?\d{2,6}[-\s]?\d{2,6})"
+)
+AUTH_CODE_PATTERN = re.compile(r"(?P<label>(인증번호|인증 코드|인증코드|OTP)\s*(?:[:：]|은|는)?\s*)(?P<code>\d{4,8})")
+
+def _mask_korean_name(name: str) -> str:
+    if not name:
+        return ""
+    if len(name) == 1:
+        return "*"
+    if len(name) == 2:
+        return f"{name[0]}*"
+    if len(name) == 3:
+        return f"{name[0]}*{name[-1]}"
+    return f"{name[0]}{'*' * (len(name) - 2)}{name[-1]}"
+
+def _mask_digits_keep_edges(value: str, keep_start: int, keep_end: int) -> str:
+    digits = [i for i, ch in enumerate(value) if ch.isdigit()]
+    if len(digits) <= keep_start + keep_end:
+        return value
+    mask_indexes = digits[keep_start : len(digits) - keep_end]
+    chars = list(value)
+    for idx in mask_indexes:
+        chars[idx] = "*"
+    return "".join(chars)
+
+def mask_sensitive_info(text: str) -> str:
+    if not text:
+        return text
+
+    text = NAME_LABEL_PATTERN.sub(
+        lambda m: f"{m.group('label')}{_mask_korean_name(m.group('name'))}", text
+    )
+    text = NAME_SUFFIX_PATTERN.sub(lambda m: _mask_korean_name(m.group("name")), text)
+    text = RRN_PATTERN.sub(lambda m: f"{m.group(1)}-*******", text)
+    text = PHONE_PATTERN.sub(
+        lambda m: f"{m.group(1)}-{'*' * len(m.group(2))}-{m.group(3)}", text
+    )
+    text = CARD_PATTERN.sub(lambda m: f"{m.group(1)}-****-****-{m.group(4)}", text)
+    text = EMAIL_PATTERN.sub(
+        lambda m: f"{m.group(1)[:2]}{'*' * max(1, len(m.group(1)) - 2)}@{m.group(2)}",
+        text,
+    )
+    text = ACCOUNT_LABEL_PATTERN.sub(
+        lambda m: f"{m.group('label')}{_mask_digits_keep_edges(m.group('num'), 3, 2)}",
+        text,
+    )
+    text = AUTH_CODE_PATTERN.sub(
+        lambda m: f"{m.group('label')}{'*' * len(m.group('code'))}", text
+    )
+    return text
 
 def _simple_keyword_fallback(text: str, max_k: int = 5) -> list[str]:
     """
@@ -126,7 +189,7 @@ def postprocess_stt(
 - isVoicephishing이 true면: 아래 카테고리 중 하나로 분류하고, 핵심 내용을 자세히(3~6문장) 부드럽게 요약해라.
   카테고리 후보: {CATEGORIES}
 - isVoicephishing이 false면: category는 null로 두고, 일반 통화 요약을 1~3문장으로 작성해라.
-- 요약에서 개인정보가 보이면 마스킹해라.
+- 요약에서 이름/전화번호 등 민감정보가 보이면 보편적으로 쓰는 형태로 마스킹해라.
 - 추가로 keywords를 5개 이하로 추출해라.
   - keywords는 핵심 주제/행동/요구사항 중심의 짧은 명사/구(2~12자 권장).
   - 개인정보(숫자열/계좌/전화/주소/인증번호/카드번호 등) 및 마스킹된 값(****)은 넣지 마라.
@@ -169,9 +232,9 @@ STT 원문:
             "isVoicephishing": bool(is_voicephishing),
             "voicephishingScore": float(voicephishing_score),
             "category": None,
-            "summary": resp.output_text.strip(),
+            "summary": mask_sensitive_info(resp.output_text.strip()),
             "keywords": fallback_keywords,
-            "community": _simple_community_fallback(text),
+            "community": [mask_sensitive_info(c) for c in _simple_community_fallback(text)],
         }
 
     # 외부 판정값 강제
@@ -188,6 +251,7 @@ STT 원문:
     # summary 보장
     if "summary" not in data or not isinstance(data["summary"], str):
         data["summary"] = ""
+    data["summary"] = mask_sensitive_info(data["summary"])
 
     # keywords 보장/정규화 (<=5, 문자열 리스트, 개인정보성 토큰 제거)
     kws = data.get("keywords", [])
@@ -226,9 +290,9 @@ STT 원문:
     if not isinstance(community, list):
         community = []
     community = [c.strip() for c in community if isinstance(c, str)]
-    community = [c for c in community if c]
+    community = [mask_sensitive_info(c) for c in community if c]
     if not community:
-        community = _simple_community_fallback(text)
+        community = [mask_sensitive_info(c) for c in _simple_community_fallback(text)]
     data["community"] = community
 
     return data

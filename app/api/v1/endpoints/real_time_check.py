@@ -44,7 +44,7 @@ def fuse_scores(mfcc_score: float, mel_score: float, w_mfcc: float = 0.5, w_mel:
     fused = (mfcc_score * w_mfcc + mel_score * w_mel) / denom
     return float(min(1.0, max(0.0, fused)))
 
-
+# 이거 안쓸것임ㅋㅋㅋㅋㅋ
 def fuse_three(audio_score: float, text_score: float, w_audio: float = 0.8, w_text: float = 0.2) -> float:
     denom = w_audio + w_text
     if denom <= 0:
@@ -87,7 +87,7 @@ async def startup_load_models():
 
     text_infer = TextInfer(
         TextInferConfig(
-            device="cpu",
+            device="cuda", 
             ae_path="assets/models/final_ae.pth",
             kobert_path="assets/models/kobert",
             threshold=5500.0,
@@ -188,11 +188,19 @@ async def mfcc_mel_fusion_endpoint(
 
     # ----- 최종 fused_score -----
     # Final score favors audio, but allows text risk to lift the result.
-    final_fused = audio_fused if text_payload is None else fuse_three(audio_fused, text_risk, w_audio=0.5, w_text=0.5)
+    # fused_score 가 아닌 따로 알림을 울려야한다
+    # 1. w_audio 가 0.9 가 넘으면 알림
+    # 2. w_text 의 result 를 5초마다 알림(3개 누적한 알림보고)
+
+    # 3. mel + mfcc 는 맞음
+    final_fused = audio_fused if text_payload is None else fuse_three(audio_fused, text_risk, w_audio=0.8, w_text=0.2)
+    
+    # mel + mfcc 점수 표기 
+    deepvoice_score = audio_fused # 0.5 * mfcc + 0.5 * mel
 
     await vp_store.add_score(call_id, final_fused)
 
-    if final_fused >= 0.9:
+    if final_fused >= 0.80:
         should_alert = True
         
     dt_ms = (time.perf_counter() - t0) * 1000.0
@@ -200,21 +208,21 @@ async def mfcc_mel_fusion_endpoint(
     
     return {
         "call_id": call_id,
-        "phishing_score": final_fused,
-        "should_alert": should_alert,
+        "phishing_score": final_fused, # 최종 피싱 점수 xxxx 안씀
+        "deepvoice_score": deepvoice_score, # mel + mfcc 점수
+        "should_alert": should_alert, 
 
         "stt": {
-            "text": stt_text,
+            "text": stt_text, # 5초 음성에 대한 STT 결과(stt 만)
             "buffered_n": (len(await stt_store.get_last_texts(call_id, n=text_infer.cfg.buffer_size)) if stt_text.strip() else 0),
         },
-
         "audio": {
             "phishing_score": audio_fused,
             "mfcc_score": mfcc_score,
             "mel_score": mel_score,
         },
 
-        "text": text_payload,
+        "text": text_payload, # kobert + ae 결과
         "mfcc": {"raw": mfcc_result},
         "mel": {"raw": mel_result},
     }

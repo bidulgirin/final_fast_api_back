@@ -329,7 +329,7 @@ class PhishingDetectorAE:
         if not sentence or not isinstance(sentence, str):
             return {"result": "✅ 정상", "score": 0.0, "keywords": []}
 
-        # ✅ keywords가 안 들어오면 FAISS에서 자동으로 뽑아 사용
+        # keywords가 안 들어오면 FAISS에서 자동으로 뽑아 사용
         if (not keywords) and self.kw_store is not None:
             faiss_hits = self.kw_store.search(sentence, topk=faiss_topk, min_sim=faiss_min_sim)
             keywords = [h["keyword"] for h in faiss_hits]

@@ -282,13 +282,13 @@ class TextInferConfig:
 
     safe_words: Optional[List[str]] = None
 
-    # ✅ FAISS 키워드 설정
+    # FAISS 키워드 설정
     faiss_index_path: str = "assets/faiss/keyword.index"
     faiss_meta_path: str = "assets/faiss/keyword_meta.json"
     faiss_topk: int = 10
     faiss_min_sim: float = 0.25
 
-    # ✅ 키워드가 잡힐 때 위험도 반영 룰
+    # 키워드가 잡힐 때 위험도 반영 룰
     keyword_warn_count: int = 1        # 키워드 1개만 잡혀도 WARN 최소 보장
     keyword_critical_count: int = 2    # 키워드 2개 이상이면 CRITICAL 쪽으로 강하게
     keyword_force_risk: float = 0.45   # AE가 SAFE여도 키워드 잡히면 risk_score 최소치
@@ -389,7 +389,7 @@ class TextInfer:
             return {"result": "🚨 위험", "prob": prob, "msg": "피싱 패턴 감지"}
         elif 28.0 <= prob < self.cfg.danger_low:
             return {"result": "🟠 경고", "prob": prob, "msg": "의심 정황 포착"}
-        return {"result": "✅ 안전", "prob": prob, "msg": "정상 문맥"}
+        return {"result": "안전", "prob": prob, "msg": "정상 문맥"}
 
     # ---- FAISS 키워드 검색 ----
     def faiss_keywords(self, sentence: str) -> List[Dict[str, Any]]:
@@ -414,9 +414,16 @@ class TextInfer:
                 "faiss_hits": [],
             }
 
-        # ✅ 키워드는 "최근 chunk" + "전체 합친 문장" 둘 다 검색(실전에서 더 잘 잡힘)
+        # 키워드는 "최근 chunk" + "전체 합친 문장" 둘 다 검색(실전에서 더 잘 잡힘)
         latest = buffered_texts[-1]
         merged = " ".join([t for t in buffered_texts if isinstance(t, str)])
+        # Bias toward SAFE if safe words are present.
+        safe_present = False
+        if self.safe_words:
+            safe_present = any(w in merged for w in self.safe_words)
+
+        warn_threshold = self.cfg.keyword_warn_count + (1 if safe_present else 0)
+        critical_threshold = self.cfg.keyword_critical_count + (2 if safe_present else 0)
 
         hits_latest = self.faiss_keywords(latest)
         hits_merged = self.faiss_keywords(merged)
@@ -441,12 +448,14 @@ class TextInfer:
         # ---- 키워드 기반 위험도 보정 ----
         # AE가 SAFE라도 키워드가 잡히면 risk_score를 최소/가산 처리
         keyword_risk = 0.0
-        if kw_count >= self.cfg.keyword_warn_count:
+        if kw_count >= warn_threshold:
             keyword_risk = max(keyword_risk, self.cfg.keyword_force_risk)
             keyword_risk = min(1.0, keyword_risk + (kw_count * self.cfg.keyword_bonus_per_hit))
+        if safe_present:
+            keyword_risk *= 0.3
 
         # ---- AE가 SAFE이고, 키워드도 없으면 바로 SAFE ----
-        if (not ae_suspicious) and kw_count == 0:
+        if (not ae_suspicious) and kw_count < warn_threshold:
             return {
                 "status": "SAFE",
                 "loss": loss,
@@ -457,7 +466,7 @@ class TextInfer:
             }
 
         # ---- 상세 분석(koBERT): AE가 의심이거나, 키워드가 일정 이상이면 분석 ----
-        run_bert = ae_suspicious or (kw_count >= self.cfg.keyword_warn_count)
+        run_bert = ae_suspicious or (kw_count >= warn_threshold)
 
         details = None
         bert_risk = 0.0
@@ -478,15 +487,15 @@ class TextInfer:
             if len(dangers) >= 1 or len(warnings) >= 2:
                 status = "🚨 CRITICAL"
             else:
-                status = "✅ NORMAL"
+                status = "NORMAL"
 
         # ---- 키워드로 상태/위험도 최종 보정 ----
         # 키워드가 2개 이상이면 CRITICAL 쪽으로 강제 승격(원하면 조건 조정)
-        if kw_count >= self.cfg.keyword_critical_count:
+        if kw_count >= critical_threshold:
             status = "🚨 CRITICAL"
 
         # AE가 SAFE라도 키워드가 있으면 NORMAL로 떨어뜨리지 않게
-        if (not ae_suspicious) and kw_count >= self.cfg.keyword_warn_count and status == "✅ NORMAL":
+        if (not ae_suspicious) and kw_count >= warn_threshold and status == "NORMAL":
             status = "🟠 WARNING"
 
         # 최종 risk_score = max(bert_risk, keyword_risk) (클램프)

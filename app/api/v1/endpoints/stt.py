@@ -90,7 +90,7 @@ async def _run_pipeline_wav(
             "text": "",
             "llm": None,
             "voicephishing": None,
-            "emotion": {"top": emotion_top, "probs": emotion_probs},
+            #"emotion": {"top": emotion_top, "probs": emotion_probs},
             "phising_sign": None,
         }
 
