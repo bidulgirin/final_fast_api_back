@@ -215,7 +215,7 @@ STT 원문:
     prompt += "\n\nCOMMUNITY: Provide speaker-segmented utterances as an array. Prefix each item with \"- \", do not use \"a:\"/\"b:\" labels, and keep each item to a single speaker's utterance. Example: [\"- ...\", \"- ...\", \"- ...\"]. If unclear, return a single item like \"- <text>\"."
 
     resp = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini-2024-07-18"),
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-2024-11-20"),
         input=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},

@@ -84,6 +84,7 @@ async def _run_pipeline_wav(
             # emotion_top = None
 
     text = await _run_stt_only(wav_path)
+    print("STT text:", repr(text))
 
     if not text:
         return {
@@ -199,6 +200,7 @@ async def stt_endpoint(
         )
 
         text = "".join(seg.text for seg in segments).strip()
+        print("STT text:", repr(text))
 
         if not text:
             return {
