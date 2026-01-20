@@ -159,6 +159,7 @@ async def mfcc_mel_fusion_endpoint(
     text_risk = 0.0
     should_alert = False
     stt_text = ""
+    password_warning = False
 
     # STT is CPU/GPU heavy, so keep the event loop responsive.
 
@@ -176,14 +177,21 @@ async def mfcc_mel_fusion_endpoint(
         print("STT error:", repr(e))
         stt_text = ""
 
+    if "비밀번호" in stt_text:
+        password_warning = True
+
     if stt_text.strip():
+        print("STT_RESULT", call_id, repr(stt_text.strip()))
         await stt_store.add_text(call_id, stt_text.strip())
         buffered = await stt_store.get_last_texts(call_id, n=text_infer.cfg.buffer_size)
 
         text_payload = text_infer.predict(buffered)
         text_risk = float(text_payload.get("risk_score", 0.0))
 
-        if text_payload.get("status") == "🚨 CRITICAL":
+        if text_payload.get("status") == "CRITICAL":
+            should_alert = True
+        elif password_warning:
+            text_payload["status"] = "WARNING"
             should_alert = True
 
     # ----- 최종 fused_score -----
@@ -208,21 +216,30 @@ async def mfcc_mel_fusion_endpoint(
     
     return {
         "call_id": call_id,
-        "phishing_score": final_fused, # 최종 피싱 점수 xxxx 안씀
-        "deepvoice_score": deepvoice_score, # mel + mfcc 점수
+        "deepvoiceScore": deepvoice_score, # mel + mfcc 점수
         "should_alert": should_alert, 
-
+        "koberScore": text_payload, # kobert + ae 결과
         "stt": {
-            "text": stt_text, # 5초 음성에 대한 STT 결과(stt 만)
-            "buffered_n": (len(await stt_store.get_last_texts(call_id, n=text_infer.cfg.buffer_size)) if stt_text.strip() else 0),
+            "text": stt_text, # 5초 음성에 대한 STT 결과
         },
-        "audio": {
-            "phishing_score": audio_fused,
-            "mfcc_score": mfcc_score,
-            "mel_score": mel_score,
-        },
-
-        "text": text_payload, # kobert + ae 결과
-        "mfcc": {"raw": mfcc_result},
-        "mel": {"raw": mel_result},
     }
+
+#  return {
+#         "call_id": call_id,
+#         "deepvoiceScore": deepvoice_score, # mel + mfcc 점수
+#         "should_alert": should_alert, 
+#         "koberScore": text_payload, # kobert + ae 결과
+#         "stt": {
+#             "text": stt_text, # 5초 음성에 대한 STT 결과(stt 만)
+#             "buffered_n": (len(await stt_store.get_last_texts(call_id, n=text_infer.cfg.buffer_size)) if stt_text.strip() else 0),
+#         },
+#         "audio": {
+#             "deepvoiceScore": audio_fused,
+#             "mfcc_score": mfcc_score,
+#             "mel_score": mel_score,
+#         },
+
+        
+#         "mfcc": {"raw": mfcc_result},
+#         "mel": {"raw": mel_result},
+#     }

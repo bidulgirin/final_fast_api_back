@@ -35,7 +35,9 @@ STOPWORDS = {
 NAME_LABEL_PATTERN = re.compile(
     r"(?P<label>(이름|성명|고객명|수취인|예금주|계좌주|담당자|대표자)\s*(?:[:：]|은|는)?\s*)(?P<name>[가-힣]{2,4})"
 )
-NAME_SUFFIX_PATTERN = re.compile(r"(?<![가-힣])(?P<name>[가-힣]{2,4})(?=\s*(?:님|씨))")
+NAME_SUFFIX_PATTERN = re.compile(
+    r"(?<![가-힣])(?P<name>[가-힣]{2,4})(?=\s*(?:님|씨|과장|팀장|대리|부장|차장|주임|선생님|교수님|수사관|검사|사무관|조사관|드림|올림))"
+)
 RRN_PATTERN = re.compile(r"(?<!\d)(\d{6})[-\s]?([1-4]\d{6})(?!\d)")
 PHONE_PATTERN = re.compile(r"(?<!\d)(0\d{1,2})[-\s]?(\d{3,4})[-\s]?(\d{4})(?!\d)")
 CARD_PATTERN = re.compile(r"(?<!\d)(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})(?!\d)")
@@ -144,7 +146,7 @@ def _simple_keyword_fallback(text: str, max_k: int = 5) -> list[str]:
 def _simple_community_fallback(text: str) -> list[str]:
     if not text or not text.strip():
         return []
-    return [f"a: {text.strip()}"]
+    return [f"- {text.strip()}"]
 
 
 def postprocess_stt(
@@ -160,7 +162,7 @@ def postprocess_stt(
       "category": str|null,
       "summary": str,
       "keywords": string[],   # <= 5
-      "community": string[]   # ["a: ...", "b: ...", "a: ..."]
+      "community": string[]   # ["- ...", "- ...", "- ..."]
     }
 
     - is_voicephishing / score 는 외부에서 주어진 값을 그대로 사용(재판단 금지)
@@ -210,7 +212,7 @@ STT 원문:
 {text}
 >>>
 """.strip()
-    prompt += "\n\nCOMMUNITY: Provide speaker-segmented utterances as an array. Example: [\"a: ...\", \"b: ...\", \"a: ...\"]. If unclear, return a single item like \"a: <text>\"."
+    prompt += "\n\nCOMMUNITY: Provide speaker-segmented utterances as an array. Prefix each item with \"- \", do not use \"a:\"/\"b:\" labels, and keep each item to a single speaker's utterance. Example: [\"- ...\", \"- ...\", \"- ...\"]. If unclear, return a single item like \"- <text>\"."
 
     resp = client.responses.create(
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini-2024-07-18"),

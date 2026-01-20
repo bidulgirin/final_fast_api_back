@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800">
+  <defs>
+    <style>
+      .box { fill: #ffffff; stroke: #1f2937; stroke-width: 2; rx: 10; ry: 10; }
+      .title { font: 700 18px "Segoe UI", Arial, sans-serif; fill: #111827; }
+      .label { font: 14px "Segoe UI", Arial, sans-serif; fill: #111827; }
+      .lane { font: 700 14px "Segoe UI", Arial, sans-serif; fill: #1f2937; }
+      .arrow { stroke: #1f2937; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .note { font: 12px "Segoe UI", Arial, sans-serif; fill: #4b5563; }
+      .bg { fill: #f3f4f6; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#1f2937" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="800" />
+
+  <!-- Title -->
+  <text class="title" x="30" y="40">RAG 흐름 (FAISS)</text>
+  <text class="note" x="30" y="62">FAISS가 후보를 빠르게 찾고 DB/스코어링 로직이 결과를 정제합니다.</text>
+
+  <!-- Shared entry -->
+  <rect class="box" x="680" y="90" width="240" height="50" />
+  <text class="label" x="800" y="120" text-anchor="middle">클라이언트 요청</text>
+
+  <rect class="box" x="680" y="170" width="240" height="50" />
+  <text class="label" x="800" y="200" text-anchor="middle">RAG 경로 선택</text>
+
+  <path class="arrow" d="M800 140 L800 170" />
+
+  <!-- Lanes -->
+  <text class="lane" x="140" y="250">일반대화 Docs</text>
+  <text class="lane" x="540" y="250">보이스피싱 Docs</text>
+  <text class="lane" x="940" y="250">키워드 RAG</text>
+  <text class="lane" x="1340" y="250">채팅 / 가이드</text>
+
+  <!-- General Chat Docs flow -->
+  <rect class="box" x="80" y="270" width="240" height="50" />
+  <text class="label" x="200" y="300" text-anchor="middle">문서 검색</text>
+
+  <rect class="box" x="80" y="350" width="240" height="50" />
+  <text class="label" x="200" y="380" text-anchor="middle">FAISS: 대화 문서 인덱스</text>
+
+  <rect class="box" x="80" y="430" width="240" height="50" />
+  <text class="label" x="200" y="460" text-anchor="middle">Top-k ID + 점수</text>
+
+  <rect class="box" x="80" y="510" width="240" height="50" />
+  <text class="label" x="200" y="540" text-anchor="middle">ID로 DB 조회</text>
+
+  <rect class="box" x="80" y="590" width="240" height="50" />
+  <text class="label" x="200" y="620" text-anchor="middle">API 응답</text>
+
+  <rect class="box" x="80" y="670" width="240" height="50" />
+  <text class="label" x="200" y="686" text-anchor="middle">
+    <tspan x="200" dy="0">통화 후 Upsert</tspan>
+    <tspan x="200" dy="18">신규 단어/사례</tspan>
+  </text>
+
+  <!-- Phishing Docs flow -->
+  <rect class="box" x="480" y="270" width="240" height="50" />
+  <text class="label" x="600" y="300" text-anchor="middle">문서 검색</text>
+
+  <rect class="box" x="480" y="350" width="240" height="50" />
+  <text class="label" x="600" y="380" text-anchor="middle">FAISS: 사례 문서 인덱스</text>
+
+  <rect class="box" x="480" y="430" width="240" height="50" />
+  <text class="label" x="600" y="460" text-anchor="middle">Top-k ID + 점수</text>
+
+  <rect class="box" x="480" y="510" width="240" height="50" />
+  <text class="label" x="600" y="540" text-anchor="middle">ID로 DB 조회</text>
+
+  <rect class="box" x="480" y="590" width="240" height="50" />
+  <text class="label" x="600" y="620" text-anchor="middle">API 응답</text>
+
+  <rect class="box" x="480" y="670" width="240" height="50" />
+  <text class="label" x="600" y="686" text-anchor="middle">
+    <tspan x="600" dy="0">통화 후 Upsert</tspan>
+    <tspan x="600" dy="18">신규 단어/사례</tspan>
+  </text>
+
+  <!-- Keyword RAG flow -->
+  <rect class="box" x="880" y="270" width="240" height="50" />
+  <text class="label" x="1000" y="300" text-anchor="middle">문장 입력</text>
+
+  <rect class="box" x="880" y="350" width="240" height="50" />
+  <text class="label" x="1000" y="380" text-anchor="middle">FAISS: 키워드 인덱스</text>
+
+  <rect class="box" x="880" y="430" width="240" height="50" />
+  <text class="label" x="1000" y="460" text-anchor="middle">키워드 히트</text>
+
+  <rect class="box" x="880" y="510" width="240" height="50" />
+  <text class="label" x="1000" y="540" text-anchor="middle">AE/BERT 점수 + 부스트</text>
+
+  <rect class="box" x="880" y="590" width="240" height="50" />
+  <text class="label" x="1000" y="620" text-anchor="middle">탐지 결과</text>
+
+  <!-- Chat/Guide flow -->
+  <rect class="box" x="1280" y="270" width="240" height="50" />
+  <text class="label" x="1400" y="300" text-anchor="middle">채팅/가이드 질의</text>
+
+  <rect class="box" x="1280" y="350" width="240" height="50" />
+  <text class="label" x="1400" y="380" text-anchor="middle">FAISS: 채팅/가이드 인덱스</text>
+
+  <rect class="box" x="1280" y="430" width="240" height="50" />
+  <text class="label" x="1400" y="460" text-anchor="middle">후보 오버페치</text>
+
+  <rect class="box" x="1280" y="510" width="240" height="50" />
+  <text class="label" x="1400" y="540" text-anchor="middle">후처리 필터 (카테고리/최소)</text>
+
+  <rect class="box" x="1280" y="590" width="240" height="50" />
+  <text class="label" x="1400" y="620" text-anchor="middle">매칭된 사례/가이드</text>
+
+  <!-- Branch arrows from select -->
+  <path class="arrow" d="M800 220 L200 270" />
+  <path class="arrow" d="M800 220 L600 270" />
+  <path class="arrow" d="M800 220 L1000 270" />
+  <path class="arrow" d="M800 220 L1400 270" />
+
+  <!-- Vertical arrows for each lane -->
+  <path class="arrow" d="M200 320 L200 350" />
+  <path class="arrow" d="M200 400 L200 430" />
+  <path class="arrow" d="M200 480 L200 510" />
+  <path class="arrow" d="M200 560 L200 590" />
+  <path class="arrow" d="M200 640 L200 670" />
+
+  <path class="arrow" d="M600 320 L600 350" />
+  <path class="arrow" d="M600 400 L600 430" />
+  <path class="arrow" d="M600 480 L600 510" />
+  <path class="arrow" d="M600 560 L600 590" />
+  <path class="arrow" d="M600 640 L600 670" />
+
+  <path class="arrow" d="M1000 320 L1000 350" />
+  <path class="arrow" d="M1000 400 L1000 430" />
+  <path class="arrow" d="M1000 480 L1000 510" />
+  <path class="arrow" d="M1000 560 L1000 590" />
+
+  <path class="arrow" d="M1400 320 L1400 350" />
+  <path class="arrow" d="M1400 400 L1400 430" />
+  <path class="arrow" d="M1400 480 L1400 510" />
+  <path class="arrow" d="M1400 560 L1400 590" />
+</svg>

@@ -485,18 +485,18 @@ class TextInfer:
 
             # 상태 결정(기존 룰)
             if len(dangers) >= 1 or len(warnings) >= 2:
-                status = "🚨 CRITICAL"
+                status = "CRITICAL"
             else:
                 status = "NORMAL"
 
         # ---- 키워드로 상태/위험도 최종 보정 ----
         # 키워드가 2개 이상이면 CRITICAL 쪽으로 강제 승격(원하면 조건 조정)
         if kw_count >= critical_threshold:
-            status = "🚨 CRITICAL"
+            status = "CRITICAL"
 
         # AE가 SAFE라도 키워드가 있으면 NORMAL로 떨어뜨리지 않게
         if (not ae_suspicious) and kw_count >= warn_threshold and status == "NORMAL":
-            status = "🟠 WARNING"
+            status = "WARNING"
 
         # 최종 risk_score = max(bert_risk, keyword_risk) (클램프)
         risk_score = float(min(1.0, max(bert_risk, keyword_risk)))
