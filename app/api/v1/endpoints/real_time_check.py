@@ -44,7 +44,6 @@ def fuse_scores(mfcc_score: float, mel_score: float, w_mfcc: float = 0.5, w_mel:
     fused = (mfcc_score * w_mfcc + mel_score * w_mel) / denom
     return float(min(1.0, max(0.0, fused)))
 
-# 이거 안쓸것임ㅋㅋㅋㅋㅋ
 def fuse_three(audio_score: float, text_score: float, w_audio: float = 0.8, w_text: float = 0.2) -> float:
     denom = w_audio + w_text
     if denom <= 0:
@@ -159,7 +158,6 @@ async def mfcc_mel_fusion_endpoint(
     text_risk = 0.0
     should_alert = False
     stt_text = ""
-    password_warning = False
 
     # STT is CPU/GPU heavy, so keep the event loop responsive.
 
@@ -177,21 +175,18 @@ async def mfcc_mel_fusion_endpoint(
         print("STT error:", repr(e))
         stt_text = ""
 
-    if "비밀번호" in stt_text:
-        password_warning = True
-
     if stt_text.strip():
         print("STT_RESULT", call_id, repr(stt_text.strip()))
         await stt_store.add_text(call_id, stt_text.strip())
         buffered = await stt_store.get_last_texts(call_id, n=text_infer.cfg.buffer_size)
 
         text_payload = text_infer.predict(buffered)
+        if not isinstance(text_payload.get("keywords"), list):
+            text_payload["keywords"] = []
         text_risk = float(text_payload.get("risk_score", 0.0))
 
-        if text_payload.get("status") == "CRITICAL":
-            should_alert = True
-        elif password_warning:
-            text_payload["status"] = "WARNING"
+        text_status = text_payload.get("status")
+        if text_status != "NORMAL" and text_risk >= 0.6:
             should_alert = True
 
     # ----- 최종 fused_score -----
@@ -219,6 +214,7 @@ async def mfcc_mel_fusion_endpoint(
         "deepvoiceScore": deepvoice_score, # mel + mfcc 점수
         "should_alert": should_alert, 
         "koberScore": text_payload, # kobert + ae 결과
+        "keywords": (text_payload.get("keywords", []) if isinstance(text_payload, dict) else []),
         "stt": {
             "text": stt_text, # 5초 음성에 대한 STT 결과
         },

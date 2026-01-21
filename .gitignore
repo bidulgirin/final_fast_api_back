@@ -10,3 +10,4 @@ versions/
 ./assets/
 node_modules/
 koBERT/
+docs/.chrome-profile

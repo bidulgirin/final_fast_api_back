@@ -103,6 +103,27 @@ def _l2_normalize(mat: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     return mat / (norms + eps)
 
 
+RISK_SAFE = "NORMAL"
+RISK_WARNING = "WARNING"
+RISK_DANGER = "DANGER"
+
+CATEGORY_KEYWORDS = [
+    ("기관사칭", ["검찰", "검사", "검찰청", "경찰", "경찰청", "수사관", "금감원", "금융감독원", "국세청", "법원", "검거", "출석", "압수수색", "계좌동결"]),
+    ("광고", ["광고", "대출", "저금리", "한도", "승인", "상담", "이자", "특별금리", "즉시", "신용", "캐피탈", "대부"]),
+    ("투자사기", ["투자", "수익", "코인", "주식", "리딩", "상장", "상한가", "물타기", "수익률", "원금", "보장"]),
+    ("채용빙자", ["채용", "면접", "입사", "지원", "이력서", "채용공고", "합격", "인사팀"]),
+    ("납치협박", ["납치", "협박", "몸값", "구속", "체포", "구금", "감금"]),
+    ("가족,지인사칭", ["가족", "지인", "친구", "어마", "아빠", "아들", "딸", "동생", "언니", "오빠", "형", "누나"]),
+]
+
+def _detect_category(text: str) -> str | None:
+    if not text:
+        return None
+    for category, keywords in CATEGORY_KEYWORDS:
+        if any(kw in text for kw in keywords):
+            return category
+    return None
+
 # ----------------------------
 # 3) FAISS 키워드 스토어
 # ----------------------------
@@ -301,7 +322,7 @@ class TextInferConfig:
 class TextInfer:
     """
     1) AE loss로 이상 여부 판단
-    2) (추가) FAISS 키워드 히트로 위험 신호 반영
+    2) FAISS 키워드 히트로 위험 신호 반영
     3) 이상이면 최근 N개를 koBERT로 상세 분석
     4) status / loss / details / risk_score(0~1) 반환
     """
@@ -369,8 +390,10 @@ class TextInfer:
         return float(loss)
 
     def bert_analyze(self, text: str) -> Dict[str, Any]:
+        category = _detect_category(text)
+        category_label = category or ""
         if any(w in text for w in self.safe_words):
-            return {"result": "안전", "prob": 0.0, "msg": "일상 대화 필터링"}
+            return {"result": category_label, "risk_label": RISK_SAFE, "category": category_label, "prob": 0.0, "msg": "일상 대화 필터링"}
 
         inputs = self.tokenizer(
             text,
@@ -386,10 +409,15 @@ class TextInfer:
 
         prob = round(float(probs[1] * 100), 2)  # 0~100
         if self.cfg.danger_low <= prob <= self.cfg.danger_high:
-            return {"result": "🚨 위험", "prob": prob, "msg": "피싱 패턴 감지"}
+            risk_label = RISK_DANGER
+            msg = "피싱 패턴 감지"
         elif 28.0 <= prob < self.cfg.danger_low:
-            return {"result": "🟠 경고", "prob": prob, "msg": "의심 정황 포착"}
-        return {"result": "안전", "prob": prob, "msg": "정상 문맥"}
+            risk_label = RISK_WARNING
+            msg = "의심 정황 포착"
+        else:
+            risk_label = RISK_SAFE
+            msg = "정상 문맥"
+        return {"result": category_label, "risk_label": risk_label, "category": category_label, "prob": prob, "msg": msg}
 
     # ---- FAISS 키워드 검색 ----
     def faiss_keywords(self, sentence: str) -> List[Dict[str, Any]]:
@@ -414,7 +442,7 @@ class TextInfer:
                 "faiss_hits": [],
             }
 
-        # 키워드는 "최근 chunk" + "전체 합친 문장" 둘 다 검색(실전에서 더 잘 잡힘)
+        # 키워드는 "최근 chunk" + "전체 합친 문장" 둘 다 검색
         latest = buffered_texts[-1]
         merged = " ".join([t for t in buffered_texts if isinstance(t, str)])
         # Bias toward SAFE if safe words are present.
@@ -423,7 +451,7 @@ class TextInfer:
             safe_present = any(w in merged for w in self.safe_words)
 
         warn_threshold = self.cfg.keyword_warn_count + (1 if safe_present else 0)
-        critical_threshold = self.cfg.keyword_critical_count + (2 if safe_present else 0)
+        min_chunks = self.cfg.buffer_size
 
         hits_latest = self.faiss_keywords(latest)
         hits_merged = self.faiss_keywords(merged)
@@ -465,17 +493,28 @@ class TextInfer:
                 "faiss_hits": [],
             }
 
+        if len(buffered_texts) < min_chunks:
+            return {
+                "status": "NORMAL",
+                "loss": loss,
+                "details": None,
+                "risk_score": 0.0,
+                "keywords": detected_kw,
+                "faiss_hits": faiss_hits,
+            }
+
         # ---- 상세 분석(koBERT): AE가 의심이거나, 키워드가 일정 이상이면 분석 ----
         run_bert = ae_suspicious or (kw_count >= warn_threshold)
 
         details = None
         bert_risk = 0.0
-        status = "🟠 WARNING"  # 기본은 경고로 시작
+        status = "NORMAL"  # 기본은 NORMAL로 시작
 
         if run_bert:
             details = [self.bert_analyze(t) for t in buffered_texts]
-            dangers = [d for d in details if d["result"] == "🚨 위험"]
-            warnings = [d for d in details if d["result"] == "🟠 경고"]
+            window = details[-min_chunks:]
+            dangers = [d for d in window if d.get("risk_label", d.get("result")) == RISK_DANGER]
+            warnings = [d for d in window if d.get("risk_label", d.get("result")) == RISK_WARNING]
 
             # bert risk_score (0~1)
             max_prob = 0.0
@@ -483,29 +522,22 @@ class TextInfer:
                 max_prob = max(max_prob, float(d.get("prob", 0.0)))
             bert_risk = max_prob / 100.0
 
-            # 상태 결정(기존 룰)
-            if len(dangers) >= 1 or len(warnings) >= 2:
+            # 상태 결정(최근 N개 기준)
+            if len(dangers) >= 1:
                 status = "CRITICAL"
+            elif len(warnings) >= 2:
+                status = "WARNING"
             else:
                 status = "NORMAL"
 
-        # ---- 키워드로 상태/위험도 최종 보정 ----
-        # 키워드가 2개 이상이면 CRITICAL 쪽으로 강제 승격(원하면 조건 조정)
-        if kw_count >= critical_threshold:
-            status = "CRITICAL"
-
-        # AE가 SAFE라도 키워드가 있으면 NORMAL로 떨어뜨리지 않게
-        if (not ae_suspicious) and kw_count >= warn_threshold and status == "NORMAL":
-            status = "WARNING"
-
         # 최종 risk_score = max(bert_risk, keyword_risk) (클램프)
         risk_score = float(min(1.0, max(bert_risk, keyword_risk)))
-
+        print(f"status={status} risk_score={risk_score} keywords={detected_kw} faiss_hits ={faiss_hits} ")
         return {
             "status": status,
             "loss": loss,
             "details": details,
             "risk_score": risk_score,
-            "keywords": detected_kw,
-            "faiss_hits": faiss_hits,
+            "keywords": detected_kw, # 탐지키워드 나오죵 이거 전달하면 됨
+            "faiss_hits": faiss_hits, # 추가로 문장마다 추정해야하는데 
         }

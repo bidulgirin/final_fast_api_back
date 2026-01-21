@@ -2,11 +2,11 @@
   <defs>
     <style>
       .box { fill: #ffffff; stroke: #1f2937; stroke-width: 2; rx: 10; ry: 10; }
-      .title { font: 700 18px "Segoe UI", Arial, sans-serif; fill: #111827; }
-      .label { font: 14px "Segoe UI", Arial, sans-serif; fill: #111827; }
-      .lane { font: 700 14px "Segoe UI", Arial, sans-serif; fill: #1f2937; }
+      .title { font: 700 32px "Segoe UI", Arial, sans-serif; fill: #111827; }
+      .label { font: 16px "Segoe UI", Arial, sans-serif; fill: #111827; }
+      .lane { font: 700 26px "Segoe UI", Arial, sans-serif; fill: #1f2937; }
       .arrow { stroke: #1f2937; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
-      .note { font: 12px "Segoe UI", Arial, sans-serif; fill: #4b5563; }
+      .note { font: 14px "Segoe UI", Arial, sans-serif; fill: #4b5563; }
       .bg { fill: #f3f4f6; }
     </style>
     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
@@ -30,7 +30,7 @@
   <path class="arrow" d="M800 140 L800 170" />
 
   <!-- Lanes -->
-  <text class="lane" x="140" y="250">일반대화 Docs</text>
+  <text class="lane" x="140" y="250" >일반대화 Docs</text>
   <text class="lane" x="540" y="250">보이스피싱 Docs</text>
   <text class="lane" x="940" y="250">키워드 RAG</text>
   <text class="lane" x="1340" y="250">채팅 / 가이드</text>
@@ -54,7 +54,7 @@
   <rect class="box" x="80" y="670" width="240" height="50" />
   <text class="label" x="200" y="686" text-anchor="middle">
     <tspan x="200" dy="0">통화 후 Upsert</tspan>
-    <tspan x="200" dy="18">신규 단어/사례</tspan>
+    <tspan x="200" dy="20">신규 단어/사례</tspan>
   </text>
 
   <!-- Phishing Docs flow -->
@@ -76,7 +76,7 @@
   <rect class="box" x="480" y="670" width="240" height="50" />
   <text class="label" x="600" y="686" text-anchor="middle">
     <tspan x="600" dy="0">통화 후 Upsert</tspan>
-    <tspan x="600" dy="18">신규 단어/사례</tspan>
+    <tspan x="600" dy="20">신규 단어/사례</tspan>
   </text>
 
   <!-- Keyword RAG flow -->
