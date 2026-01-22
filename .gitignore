@@ -11,3 +11,4 @@ versions/
 node_modules/
 koBERT/
 docs/.chrome-profile
+*.pkl

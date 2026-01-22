@@ -107,6 +107,8 @@ RISK_SAFE = "NORMAL"
 RISK_WARNING = "WARNING"
 RISK_DANGER = "DANGER"
 
+DEFAULT_SAFE_WORDS = ["점심", "저녁", "먹자", "카페", "친구", "고생", "사랑해", "반가워"]
+
 CATEGORY_KEYWORDS = [
     ("기관사칭", ["검찰", "검사", "검찰청", "경찰", "경찰청", "수사관", "금감원", "금융감독원", "국세청", "법원", "검거", "출석", "압수수색", "계좌동결"]),
     ("광고", ["광고", "대출", "저금리", "한도", "승인", "상담", "이자", "특별금리", "즉시", "신용", "캐피탈", "대부"]),
@@ -290,7 +292,7 @@ class FaissKeywordStore:
 # ----------------------------
 @dataclass
 class TextInferConfig:
-    device: str = "cpu"  # "cuda" or "cpu"
+    device: str = "cuda"  # "cuda" or "cpu"
     ae_path: str = "assets/models/final_ae.pth"
     kobert_path: str = "assets/models/kobert"
     threshold: float = 5500.0
@@ -309,6 +311,12 @@ class TextInferConfig:
     faiss_topk: int = 10
     faiss_min_sim: float = 0.25
 
+    # SAFE(정상 대화) 키워드용 FAISS (기존 키워드와 분리)
+    safe_faiss_index_path: str = "assets/faiss/safe_keyword.index"
+    safe_faiss_meta_path: str = "assets/faiss/safe_keyword_meta.json"
+    safe_faiss_topk: int = 5
+    safe_faiss_min_sim: float = 0.25
+
     # 키워드가 잡힐 때 위험도 반영 룰
     keyword_warn_count: int = 1        # 키워드 1개만 잡혀도 WARN 최소 보장
     keyword_critical_count: int = 2    # 키워드 2개 이상이면 CRITICAL 쪽으로 강하게
@@ -319,6 +327,41 @@ class TextInferConfig:
 # ----------------------------
 # 5) TextInfer
 # ----------------------------
+_SAFE_KW_STORE: Optional[FaissKeywordStore] = None
+_SAFE_KW_STORE_LOCK = threading.Lock()
+
+
+def get_safe_kw_store(
+    cfg: TextInferConfig,
+    vec: Any | None = None,
+    dim: int | None = None,
+) -> FaissKeywordStore:
+    global _SAFE_KW_STORE
+    with _SAFE_KW_STORE_LOCK:
+        if _SAFE_KW_STORE is None:
+            if vec is None or dim is None:
+                ckpt = torch.load(cfg.ae_path, map_location="cpu", weights_only=False)
+                dim = int(ckpt.get("input_dim", 8000))
+                vec = ckpt.get("vec")
+                if vec is None:
+                    raise RuntimeError("final_ae.pth checkpoint에 'vec'(TfidfVectorizer)가 없습니다.")
+
+            _SAFE_KW_STORE = FaissKeywordStore(
+                vec=vec,
+                dim=dim,
+                index_path=cfg.safe_faiss_index_path,
+                meta_path=cfg.safe_faiss_meta_path,
+            )
+
+            safe_words = cfg.safe_words or DEFAULT_SAFE_WORDS
+            if safe_words:
+                missing = [w for w in safe_words if w not in _SAFE_KW_STORE.kw_to_id]
+                if missing:
+                    _SAFE_KW_STORE.upsert(missing)
+
+        return _SAFE_KW_STORE
+
+
 class TextInfer:
     """
     1) AE loss로 이상 여부 판단
@@ -350,7 +393,7 @@ class TextInfer:
         self.bert = BertForSequenceClassification.from_pretrained(cfg.kobert_path).to(self.device)
         self.bert.eval()
 
-        self.safe_words = cfg.safe_words or ["점심", "저녁", "먹자", "카페", "친구", "고생", "사랑해", "반가워"]
+        self.safe_words = cfg.safe_words or DEFAULT_SAFE_WORDS
 
         # ---- FAISS 키워드 스토어 로드 ----
         self.kw_store = FaissKeywordStore(
@@ -359,6 +402,9 @@ class TextInfer:
             index_path=cfg.faiss_index_path,
             meta_path=cfg.faiss_meta_path,
         )
+
+        # ---- SAFE(정상 대화) 키워드 스토어 로드 ----
+        self.safe_kw_store = get_safe_kw_store(cfg, vec=self.vectorizer, dim=self.input_dim)
 
     # ---- 키워드 관리 API (서버 라우터에서 그대로 호출 가능) ----
     def upsert_keywords(self, keywords: List[str]) -> Dict[str, Any]:
@@ -425,6 +471,15 @@ class TextInfer:
             return []
         return self.kw_store.search(sentence, topk=self.cfg.faiss_topk, min_sim=self.cfg.faiss_min_sim)
 
+    def safe_faiss_keywords(self, sentence: str) -> List[Dict[str, Any]]:
+        if not sentence:
+            return []
+        return self.safe_kw_store.search(
+            sentence,
+            topk=self.cfg.safe_faiss_topk,
+            min_sim=self.cfg.safe_faiss_min_sim,
+        )
+
     # ----------------------------
     # 6) 최종 예측
     # ----------------------------
@@ -449,6 +504,9 @@ class TextInfer:
         safe_present = False
         if self.safe_words:
             safe_present = any(w in merged for w in self.safe_words)
+        safe_faiss_hits = self.safe_faiss_keywords(merged)
+        if safe_faiss_hits:
+            safe_present = True
 
         warn_threshold = self.cfg.keyword_warn_count + (1 if safe_present else 0)
         min_chunks = self.cfg.buffer_size

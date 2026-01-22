@@ -46,7 +46,7 @@ ALERT_THRESHOLD = 0.80
 _load_lock = asyncio.Lock()
 
 
-def fuse_scores(mfcc_score: float, mel_score: float, w_mfcc: float = 0.5, w_mel: float = 0.5) -> float:
+def fuse_scores(mfcc_score: float, mel_score: float, w_mfcc: float = 0.6, w_mel: float = 0.4) -> float:
     denom = (w_mfcc + w_mel)
     if denom <= 0:
         return float((mfcc_score + mel_score) / 2.0)
@@ -150,6 +150,7 @@ async def startup_load_models():
     # 최초 1회만 로딩되도록 보호.
     async with _load_lock:
         # stt_infer ::: 이게 젤 무겁고 후반에 로드되어서 이건만 체크~~
+        print("시작!!!")
         if stt_infer is not None:
             print("이미 stt_infer 로드됨")
             return
@@ -252,7 +253,7 @@ async def mfcc_mel_fusion_endpoint(
         
     print("DEEPVOICE_SCORE", deepvoice_score)
     print("KOBERTSCORE", text_payload)
-
+    
     return {
         "call_id": call_id,
         "deepvoiceScore": deepvoice_score, # mel + mfcc 점수
