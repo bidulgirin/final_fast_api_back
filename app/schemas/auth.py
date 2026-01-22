@@ -22,6 +22,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str | None = None
+    isAgree: bool
 
 
 class LoginRequest(BaseModel):

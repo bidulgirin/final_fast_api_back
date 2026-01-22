@@ -92,6 +92,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         name=body.name,
         nickname=None,
         password_hash=hash_password(body.password),
+        is_agree=body.isAgree,
     )
     db.add(user)
     db.commit()
@@ -99,6 +100,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
     access_token = create_access_token(str(user.id))
     print("Registered new user:", user.email)
+    print("추가된거:", user.is_agree)
     return {
         "accessToken": access_token,
         "isNewUser": True,
@@ -108,6 +110,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
             "name": user.name,
             "picture": user.picture,
             "nickname": user.nickname,
+            "isAgree": user.is_agree,
         },
     }
 

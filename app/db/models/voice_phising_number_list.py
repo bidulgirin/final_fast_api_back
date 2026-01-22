@@ -10,7 +10,7 @@ class VoicePhisingNumberList(Base):
     __tablename__ = "voice_phising_number_list"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    number = Column(String(20), nullable=False, unique=True, index=True)
+    number = Column(String(20), nullable=False, index=True)
     description = Column(Text)
     report_count = Column(Integer, nullable=False, server_default="1")  
     created_at = Column(TIMESTAMP, server_default=func.now())

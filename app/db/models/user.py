@@ -18,6 +18,7 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 이메일 검증 여부
     is_verified: Mapped[bool] = mapped_column(Boolean(), server_default="false", nullable=False)
+    is_agree: Mapped[bool] = mapped_column(Boolean(), server_default="false", nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     picture: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     nickname: Mapped[str | None] = mapped_column(String(50), nullable=True)

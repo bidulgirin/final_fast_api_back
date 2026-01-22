@@ -1,7 +1,6 @@
 from app.db.models.voice_phising_number_list import VoicePhisingNumberList
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 import uuid
 from app.db.session import get_db
@@ -31,16 +30,10 @@ class VoicePhisingOut(BaseModel):
 
 @router.post("", response_model=VoicePhisingOut, status_code=201)
 def insert_number(payload: VoicePhisingCreate, db: Session = Depends(get_db)):
-    row = VoicePhisingNumberList(number=payload.number, description=payload.description)
-    db.add(row)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="이미 등록된 번호입니다.")
-    db.refresh(row)
-    return row
-def insert_or_increment(body: VoicePhisingCreate, db: Session = Depends(get_db)):
+    return insert_or_increment(payload, db)
+
+
+def insert_or_increment(body: VoicePhisingCreate, db: Session):
     number = body.number.strip()
 
     obj = db.query(VoicePhisingNumberList).filter(VoicePhisingNumberList.number == number).first()
