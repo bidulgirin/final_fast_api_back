@@ -296,7 +296,7 @@ class TextInferConfig:
     ae_path: str = "assets/models/final_ae.pth"
     kobert_path: str = "assets/models/kobert"
     threshold: float = 5500.0
-    buffer_size: int = 3
+    buffer_size: int = 5
 
     # koBERT 후처리 설정
     temp: float = 5.0
@@ -321,7 +321,8 @@ class TextInferConfig:
     keyword_warn_count: int = 1        # 키워드 1개만 잡혀도 WARN 최소 보장
     keyword_critical_count: int = 2    # 키워드 2개 이상이면 CRITICAL 쪽으로 강하게
     keyword_force_risk: float = 0.45   # AE가 SAFE여도 키워드 잡히면 risk_score 최소치
-    keyword_bonus_per_hit: float = 0.15  # hit 하나마다 risk_score 가산(최대 1.0 클램프)
+    keyword_bonus_per_hit: float = 0.15  # hit ???? risk_score ??(?? 1.0 ???)
+    safe_keyword_penalty_per_hit: float = 0.10  # safe hit?? risk_score ??
 
 
 # ----------------------------
@@ -501,12 +502,11 @@ class TextInfer:
         latest = buffered_texts[-1]
         merged = " ".join([t for t in buffered_texts if isinstance(t, str)])
         # Bias toward SAFE if safe words are present.
-        safe_present = False
+        safe_word_hits = []
         if self.safe_words:
-            safe_present = any(w in merged for w in self.safe_words)
+            safe_word_hits = [w for w in self.safe_words if w in merged]
         safe_faiss_hits = self.safe_faiss_keywords(merged)
-        if safe_faiss_hits:
-            safe_present = True
+        safe_present = bool(safe_word_hits) or bool(safe_faiss_hits)
 
         warn_threshold = self.cfg.keyword_warn_count + (1 if safe_present else 0)
         min_chunks = self.cfg.buffer_size
@@ -526,6 +526,9 @@ class TextInfer:
 
         detected_kw = [h["keyword"] for h in faiss_hits]
         kw_count = len(detected_kw)
+        safe_kw_set = {h.get("keyword") for h in safe_faiss_hits if h.get("keyword")}
+        safe_kw_set.update(safe_word_hits)
+        safe_kw_count = len(safe_kw_set)
 
         # ---- AE 판단 ----
         loss = self.ae_loss(latest)
@@ -533,15 +536,15 @@ class TextInfer:
 
         # ---- 키워드 기반 위험도 보정 ----
         # AE가 SAFE라도 키워드가 잡히면 risk_score를 최소/가산 처리
-        keyword_risk = 0.0
+        keyword_risk = (kw_count * self.cfg.keyword_bonus_per_hit) - (
+            safe_kw_count * self.cfg.safe_keyword_penalty_per_hit
+        )
         if kw_count >= warn_threshold:
             keyword_risk = max(keyword_risk, self.cfg.keyword_force_risk)
-            keyword_risk = min(1.0, keyword_risk + (kw_count * self.cfg.keyword_bonus_per_hit))
-        if safe_present:
-            keyword_risk *= 0.3
+        keyword_risk = float(min(1.0, max(0.0, keyword_risk)))
 
         # ---- AE가 SAFE이고, 키워드도 없으면 바로 SAFE ----
-        if (not ae_suspicious) and kw_count < warn_threshold:
+        if (not ae_suspicious) and kw_count < warn_threshold and keyword_risk <= 0.0:
             return {
                 "status": "SAFE",
                 "loss": loss,
@@ -556,7 +559,7 @@ class TextInfer:
                 "status": "NORMAL",
                 "loss": loss,
                 "details": None,
-                "risk_score": 0.0,
+                "risk_score": keyword_risk,
                 "keywords": detected_kw,
                 "faiss_hits": faiss_hits,
             }
@@ -566,13 +569,14 @@ class TextInfer:
 
         details = None
         bert_risk = 0.0
-        status = "NORMAL"  # 기본은 NORMAL로 시작
+        status = "WARNING" 
 
         if run_bert:
             details = [self.bert_analyze(t) for t in buffered_texts]
             window = details[-min_chunks:]
             dangers = [d for d in window if d.get("risk_label", d.get("result")) == RISK_DANGER]
             warnings = [d for d in window if d.get("risk_label", d.get("result")) == RISK_WARNING]
+            dangers_with_category = [d for d in dangers if d.get("category")]
 
             # bert risk_score (0~1)
             max_prob = 0.0
@@ -581,10 +585,10 @@ class TextInfer:
             bert_risk = max_prob / 100.0
 
             # 상태 결정(최근 N개 기준)
-            if len(dangers) >= 1:
-                status = "CRITICAL"
-            elif len(warnings) >= 2:
+            if len(dangers_with_category) >= 1:
                 status = "WARNING"
+            elif len(warnings) >= 2:
+                status = "CRITICAL"
             else:
                 status = "NORMAL"
 
