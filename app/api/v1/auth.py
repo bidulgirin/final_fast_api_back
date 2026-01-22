@@ -125,6 +125,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(str(user.id))
+
+    print("===================LOGIN ACCEPT ===================")
+    print("email : ", user.email)
+    print("name : ", user.name)
+    print("nickname : ", user.nickname)
     return {
         "accessToken": access_token,
         "isNewUser": False,

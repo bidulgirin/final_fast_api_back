@@ -53,9 +53,8 @@ class VoicePhishingStore:
         final_score = 0.7 * mean_score + 0.3 * max_score
 
         # 최종 플래그 룰
-        # Simple threshold decision for alerting.
-        flag = final_score >= 0.5
-
+        flag = final_score >= 0.75 # 임계값 계속 변경해야함
+        print("Final Score!!!!!!!! : ", final_score)
         debug = {
             "count": len(scores),
             "mean": mean_score,

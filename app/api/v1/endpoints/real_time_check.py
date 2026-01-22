@@ -34,8 +34,8 @@ stt_store = STTBufferStore(ttl_sec=60 * 60, max_keep=50)
 
 PCM_SAMPLE_RATE = 16000
 STT_TIMEOUT_SEC = 3.0
-AUDIO_FUSE_W_MFCC = 0.5
-AUDIO_FUSE_W_MEL = 0.5
+AUDIO_FUSE_W_MFCC = 0.6
+AUDIO_FUSE_W_MEL = 0.4
 TEXT_FUSE_W_AUDIO = 1.0
 TEXT_FUSE_W_TEXT = 0.0
 TEXT_ALERT_MIN_RISK = 0.6
@@ -86,8 +86,6 @@ def _infer_audio_scores(audio_i16: np.ndarray) -> float:
     try:
         mfcc_result = mfcc_infer.predict_from_pcm_i16(audio_i16)
         mfcc_score = float(mfcc_result["phishing_score"])
-        print("mfcc_result", mfcc_result)
-        print("mfcc_score", mfcc_score)
     except Exception:
         raise HTTPException(status_code=500, detail="MFCC inference failed")
 
@@ -120,7 +118,6 @@ async def _infer_text_risk(call_id: str, stt_text: str) -> tuple[dict | None, fl
         return None, 0.0, False
 
     cleaned = stt_text.strip()
-    print("STT_RESULT", call_id, repr(cleaned))
     await stt_store.add_text(call_id, cleaned)
     buffered = await stt_store.get_last_texts(call_id, n=text_infer.cfg.buffer_size)
 
@@ -153,7 +150,6 @@ async def startup_load_models():
     # 최초 1회만 로딩되도록 보호.
     async with _load_lock:
         # stt_infer ::: 이게 젤 무겁고 후반에 로드되어서 이건만 체크~~
-        print("시작!!!")
         if stt_infer is not None:
             print("이미 stt_infer 로드됨")
             return
@@ -225,7 +221,7 @@ async def mfcc_mel_fusion_endpoint(
 
     # MFCC/MEL 결과를 소프트 보팅해 음성 위험도 계산.
 
-    # ----- 오디오 모델 추론 -----
+    # ----- 오디오 모델 추론(현재여기적용) -----
     audio_fused = _infer_audio_scores(audio_i16)
 
     # ----- 서버 STT -> 누적 -> 텍스트 추론 -----
@@ -254,12 +250,14 @@ async def mfcc_mel_fusion_endpoint(
     if audio_fused >= ALERT_THRESHOLD:
         should_alert = True
         
-    print("VP_LOG", call_id, audio_fused, should_alert)
-    
+    print("DEEPVOICE_SCORE", deepvoice_score)
+    print("KOBERTSCORE", text_payload)
+
     return {
         "call_id": call_id,
         "deepvoiceScore": deepvoice_score, # mel + mfcc 점수
-        "should_alert": should_alert, 
+        "should_alert": should_alert,
+        "text_risk" : text_risk, # 텍스트 위험도 점수(지금은...안쓰긴함...)
         "koberScore": text_payload, # kobert + ae 결과
         "keywords": (text_payload.get("keywords", []) if isinstance(text_payload, dict) else []),
         "stt": {

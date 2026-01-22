@@ -59,7 +59,6 @@ async def _run_stt_only(wav_path: str) -> str:
             beam_size=5,
             vad_filter=True,
         )
-        print("_info", _info)
         return "".join(seg.text for seg in segments).strip()
 
     return await run_in_threadpool(_sync)
@@ -200,7 +199,7 @@ async def stt_endpoint(
         )
 
         text = "".join(seg.text for seg in segments).strip()
-        print("STT text:", repr(text))
+        print("STT 문장 :", repr(text))
 
         if not text:
             return {
@@ -214,8 +213,9 @@ async def stt_endpoint(
         # VP score finalize
         call_id = vp_store._last_call_id
         voicephishing_flag, voicephishing_score, vp_debug = await vp_store.finalize(call_id)
-        print("voicephishing_flag", voicephishing_flag)
-
+        print("STT VOICE FLAG!!!!!", voicephishing_flag)
+        print("VOICEPHISING_SCORE", voicephishing_score)
+        print("VP DEBUG INFO", vp_debug)
         # LLM (옵션)
         llm_result = None
         if llm:
