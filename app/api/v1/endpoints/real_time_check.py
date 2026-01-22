@@ -3,6 +3,8 @@ import joblib
 import numpy as np
 import pandas as pd
 import os
+import warnings
+from sklearn.exceptions import InconsistentVersionWarning
 # 모델 로딩 전에 환경변수 설정.
 os.environ["CT2_CUDA_ALLOCATOR"] = "cuda_malloc_async"  # Python import 전에
 
@@ -254,7 +256,9 @@ async def startup_load_models():
     )
 
     try:
-        ensemble_model = joblib.load(ENSEMBLE_MODEL_PATH)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+            ensemble_model = joblib.load(ENSEMBLE_MODEL_PATH)
     except Exception as e:
         print("Ensemble model load failed:", repr(e))
         raise
