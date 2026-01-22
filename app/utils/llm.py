@@ -165,8 +165,8 @@ def postprocess_stt(
       "community": string[]   # ["- ...", "- ...", "- ..."]
     }
 
-    - is_voicephishing / score 는 외부에서 주어진 값을 그대로 사용(재판단 금지)
-    - LLM은 category/summary/keywords/community 작성에 집중
+    - is_voicephishing/score? ???? ?, ?? ??? STT ???? LLM? ??
+    - LLM? category/summary/keywords/community ? isVoicephishing/score? ??
     """
     # 빈 텍스트 처리
     if not text or not text.strip():
@@ -183,9 +183,8 @@ def postprocess_stt(
 아래는 통화 STT 원문이다.
 
 중요:
-- 보이스피싱 여부는 외부 시스템이 이미 판단했고, isVoicephishing={str(is_voicephishing).lower()} 로 확정이다.
-- 보이스피싱 점수도 외부에서 정해졌고, voicephishingScore={voicephishing_score} 로 확정이다.
-- 너는 이 두 값을 재판단/수정하지 말고 그대로 출력 JSON에 넣어라.
+- ?? ??? ??? ????? ??(isVoicephishing)? ??(voicephishingScore)? ?? ????.
+- voicephishingScore? 0.0 ~ 1.0 ??? ?? ??? ????.
 
 너의 작업:
 - isVoicephishing이 true면: 아래 카테고리 중 하나로 분류하고, 핵심 내용을 자세히(3~6문장) 부드럽게 요약해라.
@@ -240,8 +239,21 @@ STT 원문:
         }
 
     # 외부 판정값 강제
-    data["isVoicephishing"] = bool(is_voicephishing)
-    data["voicephishingScore"] = float(voicephishing_score)
+    # LLM ?? ??/??? (?? ? ????? fallback)
+    if "isVoicephishing" not in data or not isinstance(data["isVoicephishing"], (bool, int)):
+        data["isVoicephishing"] = bool(is_voicephishing)
+    else:
+        data["isVoicephishing"] = bool(data["isVoicephishing"])
+
+    score = data.get("voicephishingScore", None)
+    try:
+        score = float(score)
+    except Exception:
+        score = float(voicephishing_score)
+    if score != score:  # NaN guard
+        score = float(voicephishing_score)
+    score = max(0.0, min(1.0, score))
+    data["voicephishingScore"] = score
 
     # category 후처리
     if not data["isVoicephishing"]:

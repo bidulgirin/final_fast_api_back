@@ -308,8 +308,9 @@ async def mfcc_mel_fusion_endpoint(
     print("KOBERTSCORE", text_payload)
     
     return {
-        "call_id": call_id,
-        "deepvoiceScore": deepvoice_score, # ensemble (mfcc + mel)
+        "call_id": call_id, 
+        #"deepvoiceScore": deepvoice_score, # ensemble (mfcc + mel)
+        "deepvoiceScore": audio_fused, # mfcc + mel
         "should_alert": should_alert,
         "text_risk" : text_risk, # 텍스트 위험도 점수(지금은...안쓰긴함...)
         "koberScore": text_payload, # kobert + ae 결과

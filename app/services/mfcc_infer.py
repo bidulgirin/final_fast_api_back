@@ -96,7 +96,7 @@ class MFCCInfer:
 
         return {
             #"phishing_score": int(phishing_score),   # 0 or 1
-            "phishing_score": spoof_prob,   # 예측값
+            "phishing_score": float(spoof_prob),   # 예측값
             "spoof_prob": float(spoof_prob),         # (원하면 디버깅/로깅용으로 유지)
             "threshold": float(threshold),
             "logits": float(logit),
