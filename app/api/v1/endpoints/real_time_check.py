@@ -1,5 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+import joblib
 import numpy as np
+import pandas as pd
 import os
 # 모델 로딩 전에 환경변수 설정.
 os.environ["CT2_CUDA_ALLOCATOR"] = "cuda_malloc_async"  # Python import 전에
@@ -27,6 +29,7 @@ mfcc_infer: MFCCInfer | None = None
 mel_infer: MelBestInfer | None = None
 text_infer: TextInfer | None = None
 stt_infer: STTInfer | None = None
+ensemble_model = None
 
 vp_store = VoicePhishingStore(ttl_sec=60 * 60)
 stt_store = STTBufferStore(ttl_sec=60 * 60, max_keep=50)
@@ -40,6 +43,7 @@ TEXT_FUSE_W_AUDIO = 1.0
 TEXT_FUSE_W_TEXT = 0.0
 TEXT_ALERT_MIN_RISK = 0.6
 ALERT_THRESHOLD = 0.80
+ENSEMBLE_MODEL_PATH = "assets/models/best_ensemble_logic_model.pkl"
 
 # 중복호출을 막기 위한 lock
 # 모델 중복 로드를 막기 위한 락.
@@ -62,7 +66,13 @@ def fuse_scores(mfcc_score: float, mel_score: float, w_mfcc: float = 0.6, w_mel:
 
 
 def _require_models_loaded() -> None:
-    if mfcc_infer is None or mel_infer is None or text_infer is None or stt_infer is None:
+    if (
+        mfcc_infer is None
+        or mel_infer is None
+        or text_infer is None
+        or stt_infer is None
+        or ensemble_model is None
+    ):
         raise HTTPException(status_code=503, detail="Models not loaded")
 
 
@@ -82,7 +92,7 @@ async def _read_pcm_i16(iv: str, audio: UploadFile) -> np.ndarray:
     return audio_i16
 
 
-def _infer_audio_scores(audio_i16: np.ndarray) -> float:
+def _infer_audio_scores(audio_i16: np.ndarray) -> tuple[float, float, float]:
     try:
         mfcc_result = mfcc_infer.predict_from_pcm_i16(audio_i16)
         mfcc_score = float(mfcc_result["phishing_score"])
@@ -95,7 +105,33 @@ def _infer_audio_scores(audio_i16: np.ndarray) -> float:
     except Exception:
         raise HTTPException(status_code=500, detail="MEL inference failed")
 
-    return fuse_scores(mfcc_score, mel_score, w_mfcc=AUDIO_FUSE_W_MFCC, w_mel=AUDIO_FUSE_W_MEL)
+    audio_fused = fuse_scores(mfcc_score, mel_score, w_mfcc=AUDIO_FUSE_W_MFCC, w_mel=AUDIO_FUSE_W_MEL)
+    return mfcc_score, mel_score, audio_fused
+
+
+def _infer_ensemble_score(confidence_res: float, confidence_mcff: float) -> float:
+    if ensemble_model is None:
+        raise HTTPException(status_code=503, detail="Ensemble model not loaded")
+    try:
+        columns = getattr(
+            ensemble_model,
+            "feature_names_in_",
+            np.array(["confidence_res", "confidence_mcff"], dtype=object),
+        )
+        X = pd.DataFrame([[confidence_res, confidence_mcff]], columns=list(columns))
+        probs = ensemble_model.predict_proba(X)
+        class_index = 1
+        try:
+            classes = list(getattr(ensemble_model, "classes_", []))
+            if 1 in classes:
+                class_index = classes.index(1)
+        except Exception:
+            class_index = 1
+        score = float(probs[0][class_index])
+        print("ENSEMBLE_SCORE", score)
+        return score
+    except Exception:
+        raise HTTPException(status_code=500, detail="Ensemble inference failed")
 
 
 async def _run_stt(audio_i16: np.ndarray) -> str:
@@ -129,7 +165,8 @@ async def _infer_text_risk(call_id: str, stt_text: str) -> tuple[dict | None, fl
 
     text_risk = float(text_payload.get("risk_score", 0.0))
     text_status = text_payload.get("status")
-    should_alert = text_status != "NORMAL" and text_risk >= TEXT_ALERT_MIN_RISK
+    buffered_ready = len(buffered) >= text_infer.cfg.buffer_size
+    should_alert = buffered_ready and text_status == "CRITICAL"
     return text_payload, text_risk, should_alert
 
 
@@ -145,13 +182,19 @@ async def _infer_text_risk(call_id: str, stt_text: str) -> tuple[dict | None, fl
 
 
 async def startup_load_models():
-    global mfcc_infer, mel_infer, text_infer, stt_infer
+    global mfcc_infer, mel_infer, text_infer, stt_infer, ensemble_model
 
     # 최초 1회만 로딩되도록 보호.
     async with _load_lock:
         # stt_infer ::: 이게 젤 무겁고 후반에 로드되어서 이건만 체크~~
         print("시작!!!")
-        if stt_infer is not None:
+        if (
+            mfcc_infer is not None
+            and mel_infer is not None
+            and text_infer is not None
+            and stt_infer is not None
+            and ensemble_model is not None
+        ):
             print("이미 stt_infer 로드됨")
             return
 
@@ -162,7 +205,7 @@ async def startup_load_models():
     # 음성 모델(MFCC/MEL) 로드.
     mfcc_infer = MFCCInfer(
         model_path="assets/models/best_res2net50_se.pth",
-        cfg=MFCCInferConfig(device="cuda", center=False, target_frames=498),
+        cfg=MFCCInferConfig(device="cpu", center=False, target_frames=498),
     )
     # mel 모델 로드
     mel_infer = MelBestInfer(
@@ -210,6 +253,12 @@ async def startup_load_models():
         )
     )
 
+    try:
+        ensemble_model = joblib.load(ENSEMBLE_MODEL_PATH)
+    except Exception as e:
+        print("Ensemble model load failed:", repr(e))
+        raise
+
 
 @router.post("")
 async def mfcc_mel_fusion_endpoint(
@@ -222,8 +271,9 @@ async def mfcc_mel_fusion_endpoint(
 
     # MFCC/MEL 결과를 소프트 보팅해 음성 위험도 계산.
 
-    # ----- 오디오 모델 추론(현재여기적용) -----
-    audio_fused = _infer_audio_scores(audio_i16)
+    # ----- 오디오 모델 추론 -----
+    mfcc_score, mel_score, audio_fused = _infer_audio_scores(audio_i16)
+    deepvoice_score = _infer_ensemble_score(mfcc_score, mel_score)  # confidence_res, confidence_mcff
 
     # ----- 서버 STT -> 누적 -> 텍스트 추론 -----
     # STT는 무거우므로 threadpool에서 실행.
@@ -243,20 +293,19 @@ async def mfcc_mel_fusion_endpoint(
     # final_fused = _combine_scores(audio_fused, text_payload, text_risk)
     
     # mel + mfcc 점수 표기 
-    deepvoice_score = audio_fused  # MFCC+MEL 소프트 보팅 결과. 
+    # legacy fused score is kept in audio_fused for internal use
 
     # await vp_store.add_score(call_id, final_fused)
-    await vp_store.add_score(call_id, audio_fused)
+    await vp_store.add_score(call_id, deepvoice_score)
 
     if audio_fused >= ALERT_THRESHOLD:
         should_alert = True
         
-    print("DEEPVOICE_SCORE", deepvoice_score)
     print("KOBERTSCORE", text_payload)
     
     return {
         "call_id": call_id,
-        "deepvoiceScore": deepvoice_score, # mel + mfcc 점수
+        "deepvoiceScore": deepvoice_score, # ensemble (mfcc + mel)
         "should_alert": should_alert,
         "text_risk" : text_risk, # 텍스트 위험도 점수(지금은...안쓰긴함...)
         "koberScore": text_payload, # kobert + ae 결과
